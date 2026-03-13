@@ -46,3 +46,9 @@ logs/
 # -----------------------------
 .DS_Store
 Thumbs.db
+
+backend/uploads/
+uploads/
+*.mp4
+*.avi
+*.mov

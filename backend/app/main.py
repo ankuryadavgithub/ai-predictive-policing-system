@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import engine
 from app.models import Base
-
+from app.admin_routes import router as admin_router
 from app.crimes import router as crime_router
 from app.forecast import router as forecast_router
 from app.reports import router as reports_router
@@ -47,6 +47,8 @@ app.include_router(crime_router)
 app.include_router(forecast_router)
 app.include_router(reports_router)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+app.include_router(admin_router)
+
 # ------------------------------
 # Root Endpoint
 # ------------------------------

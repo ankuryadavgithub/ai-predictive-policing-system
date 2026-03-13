@@ -7,6 +7,10 @@ import ReportCrime from "./pages/ReportCrime";
 import PolicePanel from "./pages/PolicePanel";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import AdminPanel from "./pages/AdminPanel";
+import AdminReports from "./pages/AdminReports"
+import AdminAnalytics from "./pages/AdminAnalytics"
+import EvidenceMonitor from "./pages/EvidenceMonitor"
 
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -71,6 +75,40 @@ function App() {
           }
         />
 
+        <Route
+        path="/admin"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <PageWrapper><AdminPanel /></PageWrapper>
+          </ProtectedRoute>
+        }
+        />
+        <Route
+        path="/admin-reports"
+        element={
+        <ProtectedRoute allowedRoles={["admin"]}>
+        <PageWrapper><AdminReports/></PageWrapper>
+        </ProtectedRoute>
+        }
+        />
+
+        <Route
+        path="/admin-analytics"
+        element={
+        <ProtectedRoute allowedRoles={["admin"]}>
+        <PageWrapper><AdminAnalytics/></PageWrapper>
+        </ProtectedRoute>
+        }
+        />
+
+        <Route
+        path="/admin-evidence"
+        element={
+        <ProtectedRoute allowedRoles={["admin"]}>
+        <PageWrapper><EvidenceMonitor/></PageWrapper>
+        </ProtectedRoute>
+        }
+        />
       </Routes>
 
     </AnimatePresence>

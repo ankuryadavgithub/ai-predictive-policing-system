@@ -6,6 +6,7 @@ import os
 import shutil
 
 from app.dependencies import get_current_user
+from app.role_guard import require_role
 from app.database import SessionLocal
 from app import models
 
@@ -81,7 +82,11 @@ def create_report(
 
 # GET ALL REPORTS
 @router.get("/")
-def get_reports(db: Session = Depends(get_db)):
+def get_reports(
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
+):
+    require_role(user, ["police","admin"])
 
     reports = db.query(models.CrimeReport).all()
 
@@ -116,7 +121,13 @@ def get_reports(db: Session = Depends(get_db)):
 
 # VERIFY REPORT
 @router.patch("/{id}/verify")
-def verify_report(id: int, db: Session = Depends(get_db)):
+def verify_report(
+    id: int,
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
+):
+
+    require_role(user, ["police","admin"])
 
     report = db.query(models.CrimeReport).filter(
         models.CrimeReport.id == id
@@ -136,7 +147,13 @@ def verify_report(id: int, db: Session = Depends(get_db)):
 
 # REJECT REPORT
 @router.patch("/{id}/reject")
-def reject_report(id: int, db: Session = Depends(get_db)):
+def reject_report(
+    id: int,
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user)
+):
+
+    require_role(user, ["police","admin"])
 
     report = db.query(models.CrimeReport).filter(
         models.CrimeReport.id == id

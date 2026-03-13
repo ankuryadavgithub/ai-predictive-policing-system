@@ -24,6 +24,26 @@ const Sidebar = () => {
       name: "Police Panel",
       path: "/police",
       roles: ["police","admin"]
+    },
+    {
+      name: "Admin Panel",
+      path: "/admin",
+      roles: ["admin"]
+    },
+    {
+    name: "Reports Moderation",
+    path: "/admin-reports",
+    roles: ["admin"]
+    },
+    {
+    name: "Crime Analytics",
+    path: "/admin-analytics",
+    roles: ["admin"]
+    },
+    {
+    name: "Evidence Monitor",
+    path: "/admin-evidence",
+    roles: ["admin"]
     }
   ];
 

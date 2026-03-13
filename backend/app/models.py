@@ -21,6 +21,8 @@ class User(Base):
 
     role = Column(String)
 
+    status = Column(String, default="approved")
+    
     badge_id = Column(String)
     rank = Column(String)
     station = Column(String)

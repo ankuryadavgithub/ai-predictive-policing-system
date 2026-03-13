@@ -20,13 +20,23 @@ def get_db():
 @router.post("/register")
 def register_user(data: dict, db: Session = Depends(get_db)):
 
+    role = data.get("role")
+
+    # Default status
+    status = "approved"
+
+    # Police require admin approval
+    if role == "police":
+        status = "pending"
+
     user = User(
         full_name=data.get("fullName"),
         username=data.get("username"),
         email=data.get("email"),
         phone=data.get("phone"),
         password_hash=hash_password(data.get("password")),
-        role=data.get("role"),
+        role=role,
+        status=status,   # NEW FIELD
         badge_id=data.get("badgeId"),
         rank=data.get("rank"),
         station=data.get("station"),
@@ -52,6 +62,13 @@ def login(data: dict, db: Session = Depends(get_db)):
 
     if not verify_password(data.get("password"), user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid password")
+
+    # NEW CHECK
+    if user.status != "approved":
+        raise HTTPException(
+            status_code=403,
+            detail="Account pending admin approval"
+        )
 
     token = create_access_token({
         "sub": user.username,

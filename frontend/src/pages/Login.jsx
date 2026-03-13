@@ -42,7 +42,7 @@ const handleLogin = async (e) => {
 
   } catch (err) {
 
-    alert("Login failed");
+    alert("Login failed or Account Admin Approval Pending");
 
   }
 

@@ -1,0 +1,48 @@
+# -----------------------------
+# Python Backend
+# -----------------------------
+backend/venv/
+backend/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ML models
+*.pkl
+*.joblib
+*.h5
+*.pt
+
+# datasets
+*.csv
+*.xlsx
+data/
+datasets/
+
+# environment variables
+.env
+
+# -----------------------------
+# React Frontend
+# -----------------------------
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+
+# -----------------------------
+# Logs
+# -----------------------------
+*.log
+logs/
+
+# -----------------------------
+# IDE
+# -----------------------------
+.vscode/
+.idea/
+
+# -----------------------------
+# OS files
+# -----------------------------
+.DS_Store
+Thumbs.db

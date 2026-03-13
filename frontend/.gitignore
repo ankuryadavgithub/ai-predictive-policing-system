@@ -1,0 +1,7 @@
+venv/
+node_modules/
+datasets/
+crime_predictions_2026_2030.csv
+india_cities_crime_2020_2025.csv
+uploads/
+*.pkl models

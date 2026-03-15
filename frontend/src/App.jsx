@@ -13,6 +13,7 @@ import AdminAnalytics from "./pages/AdminAnalytics"
 import EvidenceMonitor from "./pages/EvidenceMonitor"
 
 import ProtectedRoute from "./components/ProtectedRoute";
+import Landing from "./pages/Landing";
 
 function App() {
 
@@ -25,7 +26,7 @@ function App() {
       <Routes location={location} key={location.pathname}>
 
         {/* Default */}
-        <Route path="/" element={<Navigate to="/login" />} />
+        <Route path="/" element={<Landing />} />
 
         {/* Auth */}
         <Route path="/login" element={<PageWrapper><Login /></PageWrapper>} />

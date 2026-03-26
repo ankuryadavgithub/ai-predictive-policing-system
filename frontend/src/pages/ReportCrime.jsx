@@ -234,7 +234,7 @@ const ReportCrime = () => {
       <motion.div variants={containerVariant} initial="hidden" animate="show">
         <motion.h2
           variants={itemVariant}
-          className="text-2xl font-semibold mb-6 text-gray dark:text-white"
+          className="text-2xl font-semibold mb-6 text-slate-800 dark:text-white"
         >
           Report a Crime
         </motion.h2>
@@ -369,7 +369,7 @@ const ReportCrime = () => {
           </motion.div>
 
           <motion.div variants={itemVariant} className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow">
-            <h3 className="font-semibold mb-4 text-gray dark:text-white">Location Preview</h3>
+            <h3 className="font-semibold mb-4 text-slate-800 dark:text-white">Location Preview</h3>
 
             <div className="relative h-[300px] rounded overflow-hidden">
               {loadingLocation && (
@@ -414,7 +414,7 @@ const ReportCrime = () => {
         <motion.div variants={itemVariant} className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow mt-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div>
-              <h3 className="font-semibold mb-1 text-gray dark:text-white">
+              <h3 className="font-semibold mb-1 text-slate-800 dark:text-white">
                 Upload Evidence
               </h3>
               <p className="text-sm text-gray-500 dark:text-gray-300">
@@ -467,7 +467,7 @@ const ReportCrime = () => {
         <motion.div variants={itemVariant} className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow mt-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
             <div>
-              <h3 className="font-semibold text-gray dark:text-white">Recent Report History</h3>
+              <h3 className="font-semibold text-slate-800 dark:text-white">Recent Report History</h3>
               <p className="text-sm text-gray-500 dark:text-gray-300">
                 Track your submissions and current review status.
               </p>

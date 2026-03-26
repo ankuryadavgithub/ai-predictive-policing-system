@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 import CinematicBackground from "../components/CinematicBackground";
@@ -13,77 +13,67 @@ import TypingText from "../components/TypingText";
 import "./Auth.css";
 
 const Login = () => {
-
   const [form, setForm] = useState({
     username: "",
-    password: ""
+    password: "",
   });
+  const [status, setStatus] = useState({ type: "", message: "" });
+  const [submitting, setSubmitting] = useState(false);
 
   const navigate = useNavigate();
   const { login } = useAuth();
 
   const handleChange = (e) => {
+    setForm((prev) => ({
+      ...prev,
+      [e.target.name]: e.target.value,
+    }));
 
-    setForm({
-      ...form,
-      [e.target.name]: e.target.value
-    });
-
+    if (status.message) {
+      setStatus({ type: "", message: "" });
+    }
   };
 
-const handleLogin = async (e) => {
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setStatus({ type: "", message: "" });
 
-  e.preventDefault();
-
-  try {
-    await login(form);
-    navigate("/dashboard");
-
-  } catch (err) {
-    alert(err?.response?.data?.detail || "Login failed or account approval is pending");
-
-  }
-
-};
+    try {
+      await login(form);
+      navigate("/dashboard");
+    } catch (err) {
+      setStatus({
+        type: "error",
+        message: err?.response?.data?.detail || "Login failed or account approval is pending",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
-
     <div className="auth-page">
-
       <CinematicBackground />
-
       <PoliceAlertLights />
-
       <div className="auth-overlay" />
 
-      {/* LEFT SIDE — CINEMATIC VISUALS */}
-
       <div className="auth-left">
-
         <SatelliteScan />
-
         <div className="radar"></div>
-
         <div className="globe-container">
           <CrimeGlobe />
         </div>
-
         <LiveCrimeStats />
-
       </div>
 
-
-      {/* RIGHT SIDE — LOGIN PANEL */}
-
       <div className="auth-right">
-
         <motion.div
           initial={{ opacity: 0, y: 80 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
           className="auth-card"
         >
-
           <TypingText />
 
           <motion.h1
@@ -92,53 +82,58 @@ const handleLogin = async (e) => {
             transition={{ delay: 0.4 }}
             className="auth-title"
           >
-            POLICE COMMAND LOGIN
+            SECURE SYSTEM LOGIN
           </motion.h1>
 
           <p className="auth-subtitle">
-            Secure access to Predictive Policing System
+            Access the Predictive Policing platform for citizens, police, and administrators.
           </p>
 
-          <form onSubmit={handleLogin}>
+          {status.message && (
+            <div className={`auth-message auth-message-${status.type}`}>
+              {status.message}
+            </div>
+          )}
 
+          <form onSubmit={handleLogin} className="auth-form">
             <input
               type="text"
               name="username"
-              placeholder="Officer Username"
+              placeholder="Username"
+              value={form.username}
               onChange={handleChange}
+              autoComplete="username"
               required
             />
 
             <input
               type="password"
               name="password"
-              placeholder="Secure Password"
+              placeholder="Password"
+              value={form.password}
               onChange={handleChange}
+              autoComplete="current-password"
               required
             />
 
             <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              type="submit"
+              whileHover={{ scale: submitting ? 1 : 1.03 }}
+              whileTap={{ scale: submitting ? 1 : 0.98 }}
               className="auth-button"
+              disabled={submitting}
             >
-              ACCESS SYSTEM
+              {submitting ? "AUTHENTICATING..." : "ACCESS SYSTEM"}
             </motion.button>
-
           </form>
 
           <p className="auth-switch">
-            New Officer? <a href="/register">Create Account</a>
+            Need an account? <Link to="/register">Create Account</Link>
           </p>
-
         </motion.div>
-
       </div>
-
     </div>
-
   );
-
 };
 
 export default Login;

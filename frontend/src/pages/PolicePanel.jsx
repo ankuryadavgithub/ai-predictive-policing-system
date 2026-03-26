@@ -122,7 +122,7 @@ const PolicePanel = () => {
       <motion.h2
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="text-2xl font-semibold mb-6 text-gray dark:text-white"
+        className="text-2xl font-semibold mb-6 text-slate-800 dark:text-white"
       >
         Police Verification Panel
       </motion.h2>
@@ -194,7 +194,7 @@ const PolicePanel = () => {
         ) : (
           <table className="w-full text-left">
             <thead className="bg-gray-100 dark:bg-gray-700">
-              <tr className="text-gray dark:text-white">
+              <tr className="text-slate-800 dark:text-white">
                 <th className="p-3">Report</th>
                 <th className="p-3">Crime</th>
                 <th className="p-3">Severity</th>
@@ -209,11 +209,11 @@ const PolicePanel = () => {
                 <motion.tr
                   key={report.id}
                   whileHover={{ scale: 1.005 }}
-                  className="border-t hover:bg-gray-50 dark:hover:bg-gray-700 text-gray dark:text-white"
+                  className="border-t hover:bg-gray-50 dark:hover:bg-gray-700 text-slate-800 dark:text-white"
                 >
                   <td className="p-3">
                     <p className="font-medium">{report.report_id}</p>
-                    <p className="text-xs text-gray-500">{report.city || "Unknown city"}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{report.city || "Unknown city"}</p>
                   </td>
                   <td className="p-3">{report.crime_type}</td>
                   <td className={`p-3 font-semibold ${getSeverityColor(report.severity)}`}>{report.severity}</td>
@@ -310,7 +310,7 @@ const PolicePanel = () => {
                           className="w-full h-32 object-cover rounded"
                           alt={file.original_file_name}
                         />
-                        <p className="mt-2 text-xs text-gray-500 truncate">{file.original_file_name}</p>
+                        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 truncate">{file.original_file_name}</p>
                         <p className="text-xs text-gray-400">{Math.max(0, Math.round((file.file_size || 0) / 1024))} KB</p>
                       </motion.div>
                     ))}

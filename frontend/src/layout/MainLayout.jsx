@@ -1,29 +1,12 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Sidebar from "./Sidebar";
 import Navbar from "./Navbar";
 
 const MainLayout = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-const [darkMode, setDarkMode] = useState(
-  localStorage.getItem("theme") === "dark"
-);
-
-useEffect(() => {
-  if (darkMode) {
-    document.documentElement.classList.add("dark");
-    localStorage.setItem("theme", "dark");
-  } else {
-    document.documentElement.classList.remove("dark");
-    localStorage.setItem("theme", "light");
-  }
-}, [darkMode]);
-
-
   return (
-    <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900">
-
-      {/* Sidebar */}
+    <div className="flex min-h-screen bg-slate-100 text-slate-900 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100">
       <div
         className={`fixed z-30 inset-y-0 left-0 transform 
         ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} 
@@ -33,27 +16,19 @@ useEffect(() => {
         <Sidebar />
       </div>
 
-      {/* Overlay (Mobile Only) */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black opacity-30 lg:hidden"
+          className="fixed inset-0 z-20 bg-slate-950/40 backdrop-blur-[1px] lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
-      {/* Right Side */}
-      <div className="flex flex-col flex-1 w-full">
-
-        <Navbar
-        toggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-        darkMode={darkMode}
-        setDarkMode={setDarkMode}
-        />
+      <div className="flex flex-col flex-1 w-full min-w-0">
+        <Navbar toggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
 
         <main className="flex-1 p-4 sm:p-6 overflow-y-auto overflow-x-hidden">
           {children}
         </main>
-
       </div>
     </div>
   );

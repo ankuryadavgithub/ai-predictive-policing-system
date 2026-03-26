@@ -35,7 +35,7 @@ const ProtectedMedia = ({ file, className = "", alt = "evidence" }) => {
 
   if (error) {
     return (
-      <div className={`flex items-center justify-center bg-gray-100 text-sm text-gray-500 ${className}`}>
+      <div className={`flex items-center justify-center bg-gray-100 text-sm text-gray-500 dark:bg-slate-800 dark:text-gray-300 ${className}`}>
         Unable to load evidence
       </div>
     );
@@ -43,7 +43,7 @@ const ProtectedMedia = ({ file, className = "", alt = "evidence" }) => {
 
   if (!objectUrl) {
     return (
-      <div className={`flex items-center justify-center bg-gray-100 text-sm text-gray-500 ${className}`}>
+      <div className={`flex items-center justify-center bg-gray-100 text-sm text-gray-500 dark:bg-slate-800 dark:text-gray-300 ${className}`}>
         Loading...
       </div>
     );

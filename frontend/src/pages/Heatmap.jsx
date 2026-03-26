@@ -69,7 +69,7 @@ const Heatmap = () => {
 
       <div className="mt-6">
         {!splitView ? (
-          <div className="bg-white dark:bg-gray-800 text-black dark:text-white p-4 rounded-xl shadow">
+          <div className="bg-white text-slate-900 dark:bg-slate-800 dark:text-white p-4 rounded-xl shadow">
             <MapSection
               filters={filters}
               viewState={viewState}
@@ -80,7 +80,7 @@ const Heatmap = () => {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow">
-              <h3 className="font-semibold mb-3 text-gray dark:text-white">Historical</h3>
+              <h3 className="font-semibold mb-3 text-slate-800 dark:text-white">Historical</h3>
               <MapSection
                 filters={{ ...filters, dataset: "Historical", year: Math.min(filters.year, 2025) }}
                 viewState={historicalViewState}
@@ -90,7 +90,7 @@ const Heatmap = () => {
             </div>
 
             <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow">
-              <h3 className="font-semibold mb-3 text-gray dark:text-white">Predicted</h3>
+              <h3 className="font-semibold mb-3 text-slate-800 dark:text-white">Predicted</h3>
               <MapSection
                 filters={{ ...filters, dataset: "Predicted", year: Math.max(filters.year, 2026) }}
                 viewState={predictedViewState}

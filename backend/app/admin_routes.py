@@ -20,11 +20,28 @@ def _serialize_report(report: CrimeReport) -> dict:
     return {
         "id": report.id,
         "report_id": report.report_id,
+        "reporter_user_id": report.reporter_user_id,
+        "reporter_name": report.reporter.full_name if report.reporter else None,
+        "reporter_username": report.reporter.username if report.reporter else None,
         "crime_type": report.crime_type,
         "severity": report.severity,
+        "description": report.description,
+        "latitude": report.latitude,
+        "longitude": report.longitude,
+        "city": report.city,
+        "state": report.state,
         "status": report.status,
+        "assigned_station": report.assigned_station,
+        "assigned_district": report.assigned_district,
         "created_at": report.created_at,
+        "updated_at": report.updated_at,
         "verification_notes": report.verification_notes,
+        "evidence_count": len([item for item in report.evidence if not item.is_archived]),
+        "evidence": [
+            _serialize_evidence(item)
+            for item in report.evidence
+            if not item.is_archived
+        ],
     }
 
 
@@ -34,8 +51,11 @@ def _serialize_evidence(file: EvidenceFile) -> dict:
         "report_id": file.report_id,
         "file_type": file.file_type,
         "original_file_name": file.original_file_name,
+        "content_type": file.content_type,
+        "file_size": file.file_size,
         "access_count": file.access_count,
         "uploaded_at": file.uploaded_at,
+        "is_archived": file.is_archived,
         "access_url": f"/reports/{file.report_id}/evidence/{file.id}",
     }
 

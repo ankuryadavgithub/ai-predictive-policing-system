@@ -9,21 +9,35 @@ import api from "../services/api";
 
 const colorRanges = {
   historical: [
-    [198, 219, 239],
-    [158, 202, 225],
-    [107, 174, 214],
-    [66, 146, 198],
-    [33, 113, 181],
-    [8, 69, 148],
+    [209, 229, 240],
+    [146, 197, 222],
+    [67, 147, 195],
+    [33, 102, 172],
+    [5, 48, 97],
+    [3, 31, 63],
   ],
   predicted: [
-    [254, 224, 210],
-    [252, 187, 161],
-    [252, 146, 114],
-    [251, 106, 74],
-    [222, 45, 38],
-    [165, 15, 21],
+    [254, 240, 217],
+    [253, 204, 138],
+    [252, 141, 89],
+    [227, 74, 51],
+    [179, 0, 0],
+    [127, 0, 0],
   ],
+  combined: [
+    [237, 248, 177],
+    [199, 233, 180],
+    [127, 205, 187],
+    [65, 182, 196],
+    [29, 145, 192],
+    [34, 94, 168],
+  ],
+};
+
+const legendGradients = {
+  historical: "from-sky-200 via-blue-500 to-slate-950",
+  predicted: "from-amber-200 via-orange-500 to-red-900",
+  combined: "from-lime-200 via-cyan-500 to-blue-800",
 };
 
 const stateCenters = {
@@ -64,9 +78,39 @@ const stateCenters = {
   "West Bengal": [87.855, 22.9868],
 };
 
-const MapSection = ({ filters = {}, viewState, setViewState }) => {
+const cityCenters = {
+  Mumbai: [72.8777, 19.076],
+  Delhi: [77.1025, 28.7041],
+  Bengaluru: [77.5946, 12.9716],
+  Bangalore: [77.5946, 12.9716],
+  Chennai: [80.2707, 13.0827],
+  Hyderabad: [78.4867, 17.385],
+  Kolkata: [88.3639, 22.5726],
+  Pune: [73.8567, 18.5204],
+  Ahmedabad: [72.5714, 23.0225],
+  Jaipur: [75.7873, 26.9124],
+};
 
+const prettyDataset = {
+  historical: "Historical",
+  predicted: "Predicted",
+  combined: "Combined",
+};
+
+const defaultViewState = {
+  longitude: 78.9629,
+  latitude: 22.5937,
+  zoom: 4.5,
+  pitch: 45,
+  bearing: 0,
+};
+
+const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[400px]" }) => {
   const [sampleData, setSampleData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [hoverInfo, setHoverInfo] = useState(null);
+  const [internalViewState, setInternalViewState] = useState(defaultViewState);
 
   const year = filters.year ?? 2024;
   const state = filters.state ?? "All";
@@ -79,12 +123,14 @@ const MapSection = ({ filters = {}, viewState, setViewState }) => {
       : dataset === "predicted"
       ? "predicted"
       : "all";
+  const activeViewState = viewState || internalViewState;
+  const updateViewState = setViewState || setInternalViewState;
 
   useEffect(() => {
-
     const fetchHeatmap = async () => {
-
       try {
+        setLoading(true);
+        setError("");
 
         const res = await api.get("/crimes/heatmap", {
           params: {
@@ -96,91 +142,169 @@ const MapSection = ({ filters = {}, viewState, setViewState }) => {
           }
         });
 
-        const points = res.data.map(d => ({
-          lat: d.latitude,
-          lng: d.longitude,
-          weight: d.intensity
+        const points = res.data.map((item) => ({
+          lat: item.latitude,
+          lng: item.longitude,
+          weight: item.intensity,
+          recordType: item.record_type,
         }));
 
         setSampleData(points);
-
       } catch (err) {
-
         console.error("Heatmap fetch error:", err);
-
+        setError(err?.response?.data?.detail || "Unable to load heatmap data");
+        setSampleData([]);
+      } finally {
+        setLoading(false);
       }
-
     };
 
     fetchHeatmap();
-
   }, [year, state, city, crimeType, recordType]);
 
-  // 🔹 Auto Zoom to State
   useEffect(() => {
-
-    if (state !== "All" && stateCenters[state]) {
-
-      const [lng, lat] = stateCenters[state];
-
-      setViewState(prev => ({
+    if (city !== "All" && cityCenters[city]) {
+      const [lng, lat] = cityCenters[city];
+      updateViewState((prev) => ({
         ...prev,
         longitude: lng,
         latitude: lat,
-        zoom: 6
+        zoom: 9,
       }));
-
+      return;
     }
 
-  }, [state]);
+    if (state !== "All" && stateCenters[state]) {
+      const [lng, lat] = stateCenters[state];
+      updateViewState((prev) => ({
+        ...prev,
+        longitude: lng,
+        latitude: lat,
+        zoom: 6,
+      }));
+    }
+  }, [state, city, updateViewState]);
+
+  const summary = useMemo(() => {
+    if (sampleData.length === 0) {
+      return {
+        points: 0,
+        maxIntensity: 0,
+        totalWeight: 0,
+      };
+    }
+
+    return {
+      points: sampleData.length,
+      maxIntensity: Math.max(...sampleData.map((item) => item.weight)),
+      totalWeight: Math.round(sampleData.reduce((sum, item) => sum + item.weight, 0)),
+    };
+  }, [sampleData]);
 
   const layer = useMemo(() => {
-
     return new HexagonLayer({
-      id: "heatmap",
+      id: `heatmap-${dataset}`,
       data: sampleData,
-
-      getPosition: d => [d.lng, d.lat],
-
-      getElevationWeight: d => d.weight,
-      getColorWeight: d => d.weight,
-
+      pickable: true,
+      getPosition: (d) => [d.lng, d.lat],
+      getElevationWeight: (d) => d.weight,
+      getColorWeight: (d) => d.weight,
       radius: 30000,
       elevationScale: 200,
       extruded: true,
       coverage: 0.9,
-
       colorRange: colorRanges[dataset] || colorRanges.historical,
-    });
+      onHover: (info) => {
+        if (!info?.object) {
+          setHoverInfo(null);
+          return;
+        }
 
-  }, [sampleData, dataset]);
+        setHoverInfo({
+          x: info.x,
+          y: info.y,
+          count: info.object.points.length,
+          intensity: Math.round(info.object.points.reduce((sum, point) => sum + point.source.weight, 0)),
+        });
+      },
+    });
+  }, [dataset, sampleData]);
+
+  const resetView = () => {
+    updateViewState(defaultViewState);
+  };
 
   return (
-    <div className="relative h-[400px] w-full rounded-xl overflow-hidden">
+    <div className={`relative ${heightClass} w-full rounded-xl overflow-hidden`}>
+      <div className="absolute top-3 left-3 z-20 bg-white/90 dark:bg-gray-900/90 rounded-lg shadow px-3 py-2 text-xs text-gray-700 dark:text-gray-200">
+        <p className="font-semibold">{prettyDataset[dataset] || "Historical"} Heatmap</p>
+        <p>{year} • {state === "All" ? "India" : state}{city !== "All" ? ` • ${city}` : ""}</p>
+        <p>{summary.points} hotspots • max intensity {summary.maxIntensity}</p>
+      </div>
 
-      {sampleData.length === 0 && (
+      <div className="absolute top-3 right-3 z-20 flex gap-2">
+        <button
+          onClick={resetView}
+          className="px-3 py-2 rounded bg-white/90 dark:bg-gray-900/90 text-xs text-gray-700 dark:text-gray-200 shadow"
+        >
+          Reset View
+        </button>
+      </div>
+
+      <div className="absolute bottom-3 left-3 z-20 bg-white/90 dark:bg-gray-900/90 rounded-lg shadow px-3 py-2 text-xs text-gray-700 dark:text-gray-200">
+        <p className="font-semibold mb-1">Intensity</p>
+        <div className="flex items-center gap-2">
+          <div
+            className={`w-24 h-2 rounded bg-gradient-to-r ${legendGradients[dataset] || legendGradients.historical}`}
+          ></div>
+          <span>Low to High</span>
+        </div>
+      </div>
+
+      {loading && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 dark:bg-gray-900/70 text-sm text-gray-600 dark:text-gray-300">
+          Loading heatmap data...
+        </div>
+      )}
+
+      {!loading && error && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 dark:bg-gray-900/70 text-sm text-red-600 dark:text-red-300">
+          {error}
+        </div>
+      )}
+
+      {!loading && !error && sampleData.length === 0 && (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 dark:bg-gray-900/70 text-sm text-gray-600 dark:text-gray-300">
           No map data available for the selected filters.
         </div>
       )}
 
-      <DeckGL
-        viewState={viewState}
-        controller
-        onViewStateChange={({ viewState }) => setViewState(viewState)}
-        layers={[layer]}
-        style={{ position: "absolute", inset: 0 }}
-      >
+      {hoverInfo && (
+        <div
+          className="absolute z-30 bg-white dark:bg-gray-900 text-xs text-gray-700 dark:text-gray-200 px-3 py-2 rounded shadow pointer-events-none"
+          style={{ left: hoverInfo.x + 12, top: hoverInfo.y + 12 }}
+        >
+          <p className="font-semibold">Hotspot Summary</p>
+          <p>Points: {hoverInfo.count}</p>
+          <p>Intensity: {hoverInfo.intensity}</p>
+        </div>
+      )}
 
+      <DeckGL
+        initialViewState={activeViewState}
+        viewState={activeViewState}
+        controller
+        onViewStateChange={({ viewState: nextViewState }) => updateViewState(nextViewState)}
+        layers={[layer]}
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
+      >
         <Map
           reuseMaps
           mapLib={maplibregl}
           mapStyle="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
           style={{ width: "100%", height: "100%" }}
         />
-
       </DeckGL>
-
     </div>
   );
 };

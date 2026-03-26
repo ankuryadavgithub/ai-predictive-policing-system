@@ -73,6 +73,12 @@ const MapSection = ({ filters = {}, viewState, setViewState }) => {
   const city = filters.city ?? "All";
   const crimeType = filters.crimeType ?? "All";
   const dataset = (filters.dataset ?? "Historical").toLowerCase();
+  const recordType =
+    dataset === "historical"
+      ? "historical"
+      : dataset === "predicted"
+      ? "predicted"
+      : "all";
 
   useEffect(() => {
 
@@ -85,7 +91,8 @@ const MapSection = ({ filters = {}, viewState, setViewState }) => {
             year,
             state,
             city,
-            crime_type: crimeType
+            crime_type: crimeType,
+            record_type: recordType,
           }
         });
 
@@ -107,7 +114,7 @@ const MapSection = ({ filters = {}, viewState, setViewState }) => {
 
     fetchHeatmap();
 
-  }, [year, state, crimeType]);
+  }, [year, state, city, crimeType, recordType]);
 
   // 🔹 Auto Zoom to State
   useEffect(() => {
@@ -150,6 +157,12 @@ const MapSection = ({ filters = {}, viewState, setViewState }) => {
 
   return (
     <div className="relative h-[400px] w-full rounded-xl overflow-hidden">
+
+      {sampleData.length === 0 && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 dark:bg-gray-900/70 text-sm text-gray-600 dark:text-gray-300">
+          No map data available for the selected filters.
+        </div>
+      )}
 
       <DeckGL
         viewState={viewState}

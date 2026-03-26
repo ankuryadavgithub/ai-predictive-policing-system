@@ -3,13 +3,53 @@ import { useEffect, useState } from "react";
 import api from "../services/api";
 
 const FilterPanel = ({ filters, setFilters }) => {
+  const recordTypeMap = {
+    Historical: "historical",
+    Predicted: "predicted",
+    Combined: "all",
+  };
+
+  const yearRangeMap = {
+    Historical: { min: 2020, max: 2025 },
+    Predicted: { min: 2026, max: 2030 },
+    Combined: { min: 2020, max: 2030 },
+  };
+
+  const currentRange = yearRangeMap[filters.dataset] || yearRangeMap.Historical;
 
   const handleChange = (field,value)=>{
-  setFilters(prev => ({
-    ...prev,
-    [field]: value
-  }));
-};
+    setFilters(prev => {
+      if (field === "dataset") {
+        const nextRange = yearRangeMap[value] || yearRangeMap.Historical;
+        const nextYear =
+          prev.year < nextRange.min
+            ? nextRange.min
+            : prev.year > nextRange.max
+            ? nextRange.max
+            : prev.year;
+
+        return {
+          ...prev,
+          dataset: value,
+          year: nextYear,
+          city: "All",
+        };
+      }
+
+      if (field === "state") {
+        return {
+          ...prev,
+          state: value,
+          city: "All",
+        };
+      }
+
+      return {
+        ...prev,
+        [field]: value
+      };
+    });
+  };
 
 const [cities,setCities] = useState([]);
 
@@ -20,7 +60,7 @@ const fetchCities = async()=>{
 try{
 
 const res = await api.get("/crimes/cities",{
-params:{ state: filters.state }
+params:{ state: filters.state, record_type: recordTypeMap[filters.dataset] || "all" }
 });
 
 setCities(res.data);
@@ -35,7 +75,22 @@ console.error("City fetch error",err);
 
 fetchCities();
 
-},[filters.state]);
+},[filters.state, filters.dataset]);
+
+useEffect(() => {
+
+  if (filters.city === "All") {
+    return;
+  }
+
+  if (!cities.includes(filters.city)) {
+    setFilters(prev => ({
+      ...prev,
+      city: "All",
+    }));
+  }
+
+}, [cities, filters.city, setFilters]);
 
 
   const resetFilters = ()=>{
@@ -156,15 +211,15 @@ fetchCities();
 
           <input
             type="range"
-            min="2020"
-            max="2030"
+            min={currentRange.min}
+            max={currentRange.max}
             value={filters.year}
             onChange={(e)=>handleChange("year",Number(e.target.value))}
             className="w-full mt-3"
           />
 
           <p className="text-xs text-gray-500 dark:text-gray-300">
-            {filters.year}
+            {filters.year} ({currentRange.min}-{currentRange.max})
           </p>
         </div>
 

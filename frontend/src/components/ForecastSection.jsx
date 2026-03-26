@@ -22,51 +22,48 @@ const ForecastSection = ({ filters = {} }) => {
   const state = filters.state ?? "All";
   const city = filters.city ?? "All";
   const crimeType = filters.crimeType ?? "All";
+  const dataset = filters.dataset ?? "Historical";
 
   useEffect(()=>{
 
     const fetchForecast = async()=>{
 
       try{
+        if (dataset === "Historical") {
+          setData([]);
+          setGrowth(0);
+          setRisk("Low");
+          return;
+        }
 
         const res = await api.get("/crimes/yearly",{
           params:{
             state,
             city,
-            crime_type:crimeType
+            crime_type:crimeType,
+            record_type:"predicted"
           }
         });
 
-        const historical = res.data.filter(d=>d.year<=2025);
+        const predictions = res.data
+          .filter(d => d.year >= 2026 && d.year <= 2030)
+          .map(d => ({
+            year: d.year,
+            predicted: d.total
+          }));
 
-        if(historical.length < 2) return;
-
-        const first = historical[0].total;
-        const last = historical[historical.length-1].total;
-
-        const rate = (last-first)/historical.length;
-
-        const predictions=[];
-
-        let prev = last;
-
-        for(let year=2026;year<=2030;year++){
-
-          const predicted = Math.round(prev + rate);
-
-          predictions.push({
-            year,
-            predicted
-          });
-
-          prev = predicted;
-
+        if(predictions.length === 0){
+          setData([]);
+          setGrowth(0);
+          setRisk("Low");
+          return;
         }
 
         setData(predictions);
 
-        const growthPercent =
-          ((predictions[predictions.length-1].predicted - last)/last)*100;
+        const first = predictions[0].predicted;
+        const last = predictions[predictions.length-1].predicted;
+        const growthPercent = first === 0 ? 0 : ((last - first)/first)*100;
 
         setGrowth(growthPercent);
 
@@ -77,6 +74,9 @@ const ForecastSection = ({ filters = {} }) => {
       }catch(err){
 
         console.error("Forecast error",err);
+        setData([]);
+        setGrowth(0);
+        setRisk("Low");
 
       }
 
@@ -84,7 +84,7 @@ const ForecastSection = ({ filters = {} }) => {
 
     fetchForecast();
 
-  },[state,city,crimeType]);
+  },[state,city,crimeType,dataset]);
 
 
 
@@ -176,9 +176,21 @@ const ForecastSection = ({ filters = {} }) => {
 
       </div>
 
+      {dataset === "Historical" && (
+        <div className="flex items-center justify-center h-[260px] text-sm text-gray-500 dark:text-gray-300">
+          Forecast is shown for predicted or combined datasets.
+        </div>
+      )}
+
+      {dataset !== "Historical" && data.length === 0 && (
+        <div className="flex items-center justify-center h-[260px] text-sm text-gray-500 dark:text-gray-300">
+          No forecast data available for the selected filters.
+        </div>
+      )}
 
       {/* Animated Chart */}
 
+      {dataset !== "Historical" && data.length > 0 && (
       <ResponsiveContainer width="100%" height={260}>
 
         <BarChart data={data}>
@@ -201,6 +213,7 @@ const ForecastSection = ({ filters = {} }) => {
         </BarChart>
 
       </ResponsiveContainer>
+      )}
 
     </motion.div>
 

@@ -6,8 +6,7 @@ import { Map } from "react-map-gl/maplibre";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import api from "../services/api";
-
-const BACKEND_URL = "http://127.0.0.1:8000";
+import ProtectedMedia from "../components/ProtectedMedia";
 
 
 const container = {
@@ -181,7 +180,7 @@ const PolicePanel = () => {
                     View
                   </motion.button>
 
-                  {report.status === "Pending" && (
+                  {(report.status === "Submitted" || report.status === "Pending") && (
 
                     <>
                       <motion.button
@@ -291,23 +290,11 @@ const PolicePanel = () => {
                         className="border rounded overflow-hidden"
                       >
 
-                        {file.file_type === "video" ? (
-
-                          <video
-                            src={`${BACKEND_URL}${file.file_path}`}
-                            controls
-                            className="w-full h-32 object-cover"
-                          />
-
-                        ) : (
-
-                          <img
-                            src={`${BACKEND_URL}${file.file_path}`}
-                            alt="evidence"
-                            className="w-full h-32 object-cover"
-                          />
-
-                        )}
+                        <ProtectedMedia
+                          file={file}
+                          className="w-full h-32 object-cover"
+                          alt="evidence"
+                        />
 
                       </motion.div>
 

@@ -47,13 +47,17 @@ const handleRegister = async (e) => {
 
   try {
 
-    await registerUser(form);
+    const res = await registerUser(form);
 
-    alert("Registration Successful");
+    if (res.status === "pending") {
+      alert("Registration successful. Your police account is pending admin approval.");
+    } else {
+      alert("Registration successful");
+    }
 
   } catch (err) {
 
-    alert("Registration failed");
+    alert(err?.response?.data?.detail || "Registration failed");
 
   }
 

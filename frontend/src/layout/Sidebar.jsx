@@ -1,8 +1,9 @@
 import { NavLink } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 const Sidebar = () => {
-
-  const role = localStorage.getItem("role");
+  const { user } = useAuth();
+  const role = user?.role;
 
   const menu = [
     {

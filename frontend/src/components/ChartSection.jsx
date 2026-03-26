@@ -23,6 +23,12 @@ const ChartSection = ({ filters = {} }) => {
   const city = filters.city ?? "All";
   const crimeType = filters.crimeType ?? "All";
   const year = filters.year ?? 2030;
+  const recordType =
+    filters.dataset === "Historical"
+      ? "historical"
+      : filters.dataset === "Predicted"
+      ? "predicted"
+      : "all";
 
   useEffect(() => {
 
@@ -34,7 +40,8 @@ const ChartSection = ({ filters = {} }) => {
           params: {
             state,
             city,
-            crime_type: crimeType
+            crime_type: crimeType,
+            record_type: recordType,
           }
         });
 
@@ -52,20 +59,22 @@ const ChartSection = ({ filters = {} }) => {
 
         setData(chartData);
 
-        if(filtered.length >= 2){
-
-          const first = filtered[0].total;
-          const last = filtered[filtered.length-1].total;
-
-          const g = ((last-first)/first)*100;
-
-          setGrowth(g);
-
+        if (filtered.length < 2) {
+          setGrowth(0);
+          return;
         }
+
+        const first = filtered[0].total;
+        const last = filtered[filtered.length-1].total;
+        const g = first === 0 ? 0 : ((last-first)/first)*100;
+
+        setGrowth(g);
 
       } catch (err) {
 
         console.error("Chart data fetch error:", err);
+        setData([]);
+        setGrowth(0);
 
       }
 
@@ -73,7 +82,7 @@ const ChartSection = ({ filters = {} }) => {
 
     fetchData();
 
-  }, [state, city, crimeType, year]);
+  }, [state, city, crimeType, year, recordType]);
 
 
   /* Animated Growth Counter */
@@ -153,9 +162,15 @@ const ChartSection = ({ filters = {} }) => {
 
       </div>
 
+      {data.length === 0 && (
+        <div className="flex items-center justify-center h-[280px] text-sm text-gray-500 dark:text-gray-300">
+          No chart data available for the selected filters.
+        </div>
+      )}
 
       {/* Animated Chart */}
 
+      {data.length > 0 && (
       <ResponsiveContainer width="100%" height="100%">
 
         <LineChart data={data}>
@@ -196,6 +211,7 @@ const ChartSection = ({ filters = {} }) => {
         </LineChart>
 
       </ResponsiveContainer>
+      )}
 
     </motion.div>
 

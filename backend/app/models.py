@@ -1,97 +1,137 @@
-from sqlalchemy import Column, Integer, String, Float, Text, TIMESTAMP, ForeignKey
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    Index,
+)
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
+
 from app.database import Base
 
-# ------------------------------
-# Users Table (for auth later)
-# ------------------------------
-class User(Base):
 
+class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
+    full_name = Column(String(255), nullable=False)
+    username = Column(String(100), unique=True, nullable=False, index=True)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    phone = Column(String(20))
+    address = Column(Text)
+    government_id = Column(String(100))
+    gps_consent = Column(Boolean, default=False)
 
-    full_name = Column(String)
-    username = Column(String, unique=True)
-    email = Column(String, unique=True)
-    phone = Column(String)
+    password_hash = Column(String(255), nullable=False)
+    role = Column(String(30), nullable=False, index=True)
+    status = Column(String(30), default="approved", nullable=False, index=True)
 
-    password_hash = Column(String)
+    badge_id = Column(String(100))
+    rank = Column(String(100))
+    station = Column(String(255))
+    district = Column(String(255))
+    city = Column(String(255))
+    department = Column(String(255))
 
-    role = Column(String)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
 
-    status = Column(String, default="approved")
-    
-    badge_id = Column(String)
-    rank = Column(String)
-    station = Column(String)
-    district = Column(String)
-
-    city = Column(String)
-
-    department = Column(String)
+    reports = relationship("CrimeReport", back_populates="reporter", foreign_keys="CrimeReport.reporter_user_id")
+    reviewed_reports = relationship("CrimeReport", foreign_keys="CrimeReport.reviewed_by")
 
 
-# ------------------------------
-# Historical Crimes Table
-# ------------------------------
 class Crime(Base):
     __tablename__ = "crimes"
 
     id = Column(Integer, primary_key=True, index=True)
-    state = Column(String)
-    district = Column(String)
-    city = Column(String)
+    state = Column(String(255), index=True)
+    district = Column(String(255), index=True)
+    city = Column(String(255), index=True)
     latitude = Column(Float)
     longitude = Column(Float)
-    year = Column(Integer)
-    crime_type = Column(String)
+    year = Column(Integer, index=True)
+    crime_type = Column(String(255), index=True)
     crime_count = Column(Integer)
+    record_type = Column(String(20), default="historical", nullable=False, index=True)
+    prediction_batch = Column(String(100), nullable=True)
+    ingested_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index("ix_crimes_state_city_year_type_record", "state", "city", "year", "crime_type", "record_type"),
+    )
 
 
-# ------------------------------
-# Forecast Table (Future Use)
-# ------------------------------
 class Prediction(Base):
     __tablename__ = "predictions"
 
     id = Column(Integer, primary_key=True, index=True)
-    state = Column(String)
-    district = Column(String)
+    state = Column(String(255))
+    district = Column(String(255))
     year = Column(Integer)
     predicted_crime_count = Column(Float)
 
 
-# ------------------------------
-# Crime Report Table
-# ------------------------------
 class CrimeReport(Base):
     __tablename__ = "crime_reports"
 
     id = Column(Integer, primary_key=True, index=True)
-    report_id = Column(String, unique=True)
+    report_id = Column(String(20), unique=True, nullable=False, index=True)
 
-    crime_type = Column(String)
-    severity = Column(String)
-    description = Column(Text)
+    reporter_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
-    latitude = Column(Float)
-    longitude = Column(Float)
+    crime_type = Column(String(255), nullable=False)
+    severity = Column(String(30), nullable=False)
+    description = Column(Text, nullable=False)
 
-    status = Column(String, default="Pending")
-    created_at = Column(TIMESTAMP, server_default=func.now())
+    latitude = Column(Float, nullable=False)
+    longitude = Column(Float, nullable=False)
+    city = Column(String(255))
+    state = Column(String(255))
 
-    evidence = relationship("EvidenceFile", back_populates="report")
+    status = Column(String(30), default="Submitted", nullable=False, index=True)
+    verification_notes = Column(Text)
+    assigned_station = Column(String(255))
+    assigned_district = Column(String(255))
+    reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    reviewed_at = Column(DateTime(timezone=True))
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    reporter = relationship("User", back_populates="reports", foreign_keys=[reporter_user_id])
+    evidence = relationship("EvidenceFile", back_populates="report", cascade="all, delete-orphan")
+
 
 class EvidenceFile(Base):
     __tablename__ = "evidence_files"
 
     id = Column(Integer, primary_key=True, index=True)
+    report_id = Column(Integer, ForeignKey("crime_reports.id"), nullable=False, index=True)
 
-    report_id = Column(Integer, ForeignKey("crime_reports.id"))
-
-    file_path = Column(String)
-    file_type = Column(String)
+    original_file_name = Column(String(255), nullable=False)
+    stored_file_name = Column(String(255), nullable=False, unique=True)
+    file_path = Column(String(500), nullable=False)
+    file_type = Column(String(50), nullable=False)
+    content_type = Column(String(100), nullable=False)
+    file_size = Column(Integer, nullable=False)
+    is_archived = Column(Boolean, default=False, nullable=False)
+    access_count = Column(Integer, default=0, nullable=False)
+    last_accessed_at = Column(DateTime(timezone=True))
+    uploaded_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     report = relationship("CrimeReport", back_populates="evidence")

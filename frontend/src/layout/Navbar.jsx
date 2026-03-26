@@ -1,17 +1,14 @@
 import { Menu, LogOut } from "lucide-react";
-import { logoutUser } from "../utils/auth";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 const Navbar = ({ toggleSidebar, darkMode, setDarkMode }) => {
-
   const navigate = useNavigate();
-  const username = localStorage.getItem("username");
+  const { user, logout } = useAuth();
 
-  const logout = () => {
-
-    logoutUser();
+  const handleLogout = async () => {
+    await logout();
     navigate("/login");
-
   };
 
   return (
@@ -53,14 +50,14 @@ const Navbar = ({ toggleSidebar, darkMode, setDarkMode }) => {
         {/* Officer Name */}
 
         <span className="hidden sm:block font-medium">
-          {username}
+          {user?.username}
         </span>
 
 
         {/* Logout Button */}
 
         <button
-          onClick={logout}
+          onClick={handleLogout}
           className="flex items-center gap-2 px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded transition hover:scale-105"
         >
 

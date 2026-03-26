@@ -1,61 +1,76 @@
-from passlib.context import CryptContext
-from datetime import datetime, timedelta
-from jose import JWTError, jwt
+import re
+import uuid
+from datetime import datetime, timedelta, timezone
 
-SECRET_KEY = "supersecretkey123"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+
+from app.config import settings
+from app.database import redis_client
+
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+PASSWORD_PATTERN = re.compile(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$")
 
 
-# ----------------------
-# Password Hashing
-# ----------------------
+def validate_password_strength(password: str) -> bool:
+    return bool(PASSWORD_PATTERN.match(password))
 
-def hash_password(password):
+
+def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def verify_password(password, hashed):
+def verify_password(password: str, hashed: str) -> bool:
     return pwd_context.verify(password, hashed)
 
 
-# ----------------------
-# JWT Token Creation
-# ----------------------
-
-def create_access_token(data: dict):
-
+def create_access_token(data: dict) -> tuple[str, str, datetime]:
     to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + timedelta(
+        minutes=settings.access_token_expire_minutes
+    )
+    token_id = str(uuid.uuid4())
+    to_encode.update({"exp": expire, "jti": token_id})
 
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    encoded_jwt = jwt.encode(
+        to_encode,
+        settings.secret_key,
+        algorithm=settings.jwt_algorithm,
+    )
 
-    to_encode.update({"exp": expire})
-
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-    return encoded_jwt
+    return encoded_jwt, token_id, expire
 
 
-# ----------------------
-# Token Verification
-# ----------------------
+def revoke_token(token_id: str, expires_at: datetime | int | float) -> None:
+    if redis_client is None:
+        return
+
+    if isinstance(expires_at, (int, float)):
+        expires_at = datetime.fromtimestamp(expires_at, tz=timezone.utc)
+
+    ttl = max(int((expires_at - datetime.now(timezone.utc)).total_seconds()), 0)
+    if ttl <= 0:
+        return
+
+    redis_client.setex(f"revoked_token:{token_id}", ttl, "1")
+
+
+def is_token_revoked(token_id: str | None) -> bool:
+    if redis_client is None or not token_id:
+        return False
+    return bool(redis_client.exists(f"revoked_token:{token_id}"))
+
 
 def verify_token(token: str):
-
     try:
-
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-
-        username: str = payload.get("sub")
-
-        role: str = payload.get("role")
-
-        if username is None:
+        payload = jwt.decode(
+            token,
+            settings.secret_key,
+            algorithms=[settings.jwt_algorithm],
+        )
+        if is_token_revoked(payload.get("jti")):
             return None
-
-        return {"username": username, "role": role}
-
+        return payload
     except JWTError:
         return None

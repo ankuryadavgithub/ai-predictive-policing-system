@@ -8,6 +8,12 @@ const KPISection = ({ filters = {} }) => {
   const [displayValues, setDisplayValues] = useState({});
 
   useEffect(() => {
+    const recordType =
+      filters.dataset === "Historical"
+        ? "historical"
+        : filters.dataset === "Predicted"
+        ? "predicted"
+        : "all";
 
     const fetchData = async () => {
 
@@ -18,7 +24,8 @@ const KPISection = ({ filters = {} }) => {
             state: filters.state,
             city: filters.city,
             crime_type: filters.crimeType,
-            year: filters.year
+            year: filters.year,
+            record_type: recordType,
           }
         });
 

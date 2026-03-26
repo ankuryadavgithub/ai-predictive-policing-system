@@ -33,6 +33,7 @@ const ReportCrime = () => {
   const [files, setFiles] = useState([]);
   const [location, setLocation] = useState(null);
   const [loadingLocation, setLoadingLocation] = useState(true);
+  const [history, setHistory] = useState([]);
 
   useEffect(() => {
 
@@ -49,6 +50,27 @@ const ReportCrime = () => {
         setLoadingLocation(false);
       }
     );
+
+  }, []);
+
+  useEffect(() => {
+
+    const loadHistory = async () => {
+
+      try {
+
+        const res = await api.get("/reports/");
+        setHistory(res.data.slice(0, 5));
+
+      } catch (err) {
+
+        console.error("Failed to load report history", err);
+
+      }
+
+    };
+
+    loadHistory();
 
   }, []);
 
@@ -112,6 +134,9 @@ const ReportCrime = () => {
       await api.post("/reports/", formData, {
         headers: { "Content-Type": "multipart/form-data" }
       });
+
+      const reportsRes = await api.get("/reports/");
+      setHistory(reportsRes.data.slice(0, 5));
 
       alert("Crime report submitted successfully");
 
@@ -359,6 +384,61 @@ const ReportCrime = () => {
 
         </motion.div>
 
+
+
+        <motion.div
+          variants={itemVariant}
+          className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow mt-6"
+        >
+
+          <h3 className="font-semibold mb-4 text-gray dark:text-white">
+            Recent Report History
+          </h3>
+
+          <div className="space-y-3">
+
+            {history.length === 0 && (
+
+              <p className="text-sm text-gray-500 dark:text-gray-300">
+                No reports submitted yet.
+              </p>
+
+            )}
+
+            {history.map((report) => (
+
+              <div
+                key={report.id}
+                className="border border-gray-200 dark:border-gray-700 rounded-lg p-4"
+              >
+
+                <div className="flex items-center justify-between gap-4">
+
+                  <div>
+
+                    <p className="font-medium text-gray-800 dark:text-white">
+                      {report.report_id} • {report.crime_type}
+                    </p>
+
+                    <p className="text-sm text-gray-500 dark:text-gray-300">
+                      {new Date(report.created_at).toLocaleString()}
+                    </p>
+
+                  </div>
+
+                  <span className="text-sm font-semibold text-blue-600 dark:text-blue-300">
+                    {report.status}
+                  </span>
+
+                </div>
+
+              </div>
+
+            ))}
+
+          </div>
+
+        </motion.div>
 
 
         {/* SUBMIT */}

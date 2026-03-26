@@ -2,9 +2,9 @@ import { useEffect,useState } from "react"
 import { motion } from "framer-motion"
 import MainLayout from "../layout/MainLayout"
 import api from "../services/api"
+import ProtectedMedia from "../components/ProtectedMedia"
 
 const EvidenceMonitor = ()=>{
-
 const [files,setFiles] = useState([])
 
 useEffect(()=>{
@@ -52,24 +52,11 @@ whileHover={{scale:1.03}}
 className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow"
 >
 
-{file.file_type==="image" && (
-
-<img
-src={`http://127.0.0.1:8000${file.file_path}`}
-className="rounded mb-3"
+<ProtectedMedia
+file={file}
+className="rounded mb-3 w-full max-h-64 object-cover"
+alt={file.original_file_name}
 />
-
-)}
-
-{file.file_type==="video" && (
-
-<video
-controls
-className="rounded mb-3"
-src={`http://127.0.0.1:8000${file.file_path}`}
-/>
-
-)}
 
 <button
 onClick={()=>deleteFile(file.id)}

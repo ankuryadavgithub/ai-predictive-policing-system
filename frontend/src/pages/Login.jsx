@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { loginUser } from "../utils/auth";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 import CinematicBackground from "../components/CinematicBackground";
 import CrimeGlobe from "../components/CrimeGlobe";
@@ -20,6 +20,7 @@ const Login = () => {
   });
 
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   const handleChange = (e) => {
 
@@ -35,14 +36,11 @@ const handleLogin = async (e) => {
   e.preventDefault();
 
   try {
-
-    await loginUser(form);
-
+    await login(form);
     navigate("/dashboard");
 
   } catch (err) {
-
-    alert("Login failed or Account Admin Approval Pending");
+    alert(err?.response?.data?.detail || "Login failed or account approval is pending");
 
   }
 

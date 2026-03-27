@@ -106,6 +106,11 @@ def get_city_trend(
     record_type: schemas.RecordType = "all",
     db: Session = Depends(get_db),
 ):
+    cache_key = f"crimes:city:{city.lower()}:{record_type}"
+    cached = get_cache(cache_key)
+    if cached is not None:
+        return cached
+
     query = db.query(
         models.Crime.year,
         func.sum(models.Crime.crime_count).label("total"),
@@ -113,7 +118,9 @@ def get_city_trend(
     query = _apply_record_type(query, None, record_type)
 
     results = query.group_by(models.Crime.year).order_by(models.Crime.year).all()
-    return [{"year": row.year, "total": row.total} for row in results]
+    data = [{"year": row.year, "total": row.total} for row in results]
+    set_cache(cache_key, data, settings.redis_cache_ttl_seconds)
+    return data
 
 
 @router.get("/cities")
@@ -122,6 +129,11 @@ def get_cities(
     record_type: schemas.RecordType = "all",
     db: Session = Depends(get_db),
 ):
+    cache_key = f"crimes:cities:{state}:{record_type}"
+    cached = get_cache(cache_key)
+    if cached is not None:
+        return cached
+
     query = db.query(models.Crime.city)
     query = _apply_record_type(query, None, record_type)
 
@@ -129,7 +141,9 @@ def get_cities(
         query = query.filter(models.Crime.state == state)
 
     results = query.distinct().order_by(models.Crime.city).all()
-    return [row.city for row in results if row.city]
+    data = [row.city for row in results if row.city]
+    set_cache(cache_key, data, settings.redis_cache_ttl_seconds)
+    return data
 
 
 @router.get("/heatmap")

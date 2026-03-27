@@ -12,6 +12,7 @@ import AdminReports from "./pages/AdminReports"
 import AdminAnalytics from "./pages/AdminAnalytics"
 import EvidenceMonitor from "./pages/EvidenceMonitor"
 import PatrolRecommendation from "./pages/PatrolRecommendation"
+import MissionControl from "./pages/MissionControl"
 
 import ProtectedRoute from "./components/ProtectedRoute";
 import Landing from "./pages/Landing";
@@ -117,6 +118,15 @@ function App() {
         element={
         <ProtectedRoute allowedRoles={["police","admin"]}>
         <PageWrapper><PatrolRecommendation/></PageWrapper>
+        </ProtectedRoute>
+        }
+        />
+
+        <Route
+        path="/mission-control"
+        element={
+        <ProtectedRoute allowedRoles={["police","admin"]}>
+        <PageWrapper><MissionControl/></PageWrapper>
         </ProtectedRoute>
         }
         />

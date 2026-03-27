@@ -32,6 +32,11 @@ const Sidebar = () => {
       roles: ["police", "admin"]
     },
     {
+      name: "Mission Control",
+      path: "/mission-control",
+      roles: ["police", "admin"]
+    },
+    {
       name: "Admin Panel",
       path: "/admin",
       roles: ["admin"]

@@ -364,11 +364,18 @@ def top_districts(
     user: User = Depends(get_current_user),
 ):
     require_role(user, ["admin"])
+    cache_key = f"admin:analytics:top-districts:{record_type}"
+    cached = get_cache(cache_key)
+    if cached is not None:
+        return cached
+
     query = db.query(Crime.district, func.sum(Crime.crime_count).label("total"))
     if record_type != "all":
         query = query.filter(Crime.record_type == record_type)
     data = query.group_by(Crime.district).order_by(func.sum(Crime.crime_count).desc()).limit(5).all()
-    return [{"district": row[0], "total": row[1]} for row in data]
+    result = [{"district": row[0], "total": row[1]} for row in data]
+    set_cache(cache_key, result, settings.redis_cache_ttl_seconds)
+    return result
 
 
 @router.get("/reports")

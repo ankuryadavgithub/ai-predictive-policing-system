@@ -10,7 +10,7 @@ from app.config import settings
 from app.dependencies import get_current_user, get_db
 from app.models import Crime, CrimeReport, EvidenceFile, User
 from app.role_guard import require_role
-from app.schemas import UserSummary
+from app.schemas import ReportAssignmentRequest, UserSummary
 
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -33,6 +33,9 @@ def _serialize_report(report: CrimeReport) -> dict:
         "status": report.status,
         "assigned_station": report.assigned_station,
         "assigned_district": report.assigned_district,
+        "assigned_police_id": report.assigned_police_id,
+        "assigned_police_username": report.assigned_officer.username if report.assigned_officer else None,
+        "assigned_police_name": report.assigned_officer.full_name if report.assigned_officer else None,
         "created_at": report.created_at,
         "updated_at": report.updated_at,
         "verification_notes": report.verification_notes,
@@ -79,6 +82,21 @@ def get_all_users(
         .all()
     )
     return [UserSummary.model_validate(item).model_dump(mode="json") for item in users]
+
+
+@router.get("/officers")
+def get_assignable_officers(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    require_role(user, ["admin"])
+    officers = (
+        db.query(User)
+        .filter(User.role == "police", User.status == "approved")
+        .order_by(User.full_name.asc())
+        .all()
+    )
+    return [UserSummary.model_validate(item).model_dump(mode="json") for item in officers]
 
 
 @router.delete("/users/{id}")
@@ -261,6 +279,53 @@ def resolve_report(
     db.commit()
     logger.info("Admin resolved report report_id=%s actor=%s", report.report_id, user.username)
     return {"message": "Report resolved"}
+
+
+@router.patch("/reports/{id}/assign")
+def assign_report(
+    id: int,
+    payload: ReportAssignmentRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    require_role(user, ["admin"])
+    report = db.query(CrimeReport).filter(CrimeReport.id == id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    officer = None
+    if payload.assigned_police_id is not None:
+        officer = (
+            db.query(User)
+            .filter(
+                User.id == payload.assigned_police_id,
+                User.role == "police",
+                User.status == "approved",
+            )
+            .first()
+        )
+        if officer is None:
+            raise HTTPException(status_code=404, detail="Police officer not found")
+
+    report.assigned_police_id = officer.id if officer else None
+    report.assigned_station = officer.station if officer else report.assigned_station
+    report.assigned_district = officer.district if officer else report.assigned_district
+    if report.status not in {"Verified", "Rejected", "Resolved"}:
+        report.status = "Assigned" if officer else "Submitted"
+    if payload.notes:
+        report.verification_notes = payload.notes
+
+    db.commit()
+    logger.info(
+        "Admin assigned report report_id=%s officer_id=%s actor=%s",
+        report.report_id,
+        officer.id if officer else None,
+        user.username,
+    )
+    return {
+        "message": "Report assignment updated",
+        "assigned_police_id": report.assigned_police_id,
+    }
 
 
 @router.patch("/reports/{id}/fake")

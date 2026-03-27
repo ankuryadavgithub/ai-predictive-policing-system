@@ -95,6 +95,11 @@ class ReportUpdateRequest(BaseModel):
     verification_notes: str | None = None
 
 
+class ReportAssignmentRequest(BaseModel):
+    assigned_police_id: int | None = None
+    notes: str | None = None
+
+
 class EvidenceResponse(BaseModel):
     id: int
     file_type: str
@@ -119,6 +124,9 @@ class ReportResponse(BaseModel):
     status: str
     assigned_station: str | None
     assigned_district: str | None
+    assigned_police_id: int | None = None
+    assigned_police_username: str | None = None
+    assigned_police_name: str | None = None
     verification_notes: str | None
     created_at: datetime
     updated_at: datetime

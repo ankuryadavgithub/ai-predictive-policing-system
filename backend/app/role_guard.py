@@ -16,6 +16,8 @@ def can_access_report(user: User, report: CrimeReport) -> bool:
         return report.reporter_user_id == user.id
 
     if user.role == "police":
+        if report.assigned_police_id is not None:
+            return report.assigned_police_id == user.id
         if report.assigned_district and user.district:
             return report.assigned_district == user.district
         if report.assigned_station and user.station:

@@ -141,6 +141,7 @@ const PolicePanel = () => {
         >
           <option value="all">All statuses</option>
           <option value="Submitted">Submitted</option>
+          <option value="Assigned">Assigned</option>
           <option value="Verified">Verified</option>
           <option value="Rejected">Rejected</option>
           <option value="Resolved">Resolved</option>
@@ -232,7 +233,7 @@ const PolicePanel = () => {
                       View
                     </button>
 
-                    {(report.status === "Submitted" || report.status === "Pending") && (
+                    {(report.status === "Submitted" || report.status === "Pending" || report.status === "Assigned") && (
                       <>
                         <button
                           onClick={() => {
@@ -284,6 +285,7 @@ const PolicePanel = () => {
                 <p><strong>City:</strong> {selectedReport.city || "Unknown"}</p>
                 <p><strong>Assigned District:</strong> {selectedReport.assigned_district || "Not assigned"}</p>
                 <p><strong>Assigned Station:</strong> {selectedReport.assigned_station || "Not assigned"}</p>
+                <p><strong>Assigned Officer:</strong> {selectedReport.assigned_police_name || selectedReport.assigned_police_username || "Area queue"}</p>
                 <p><strong>Date:</strong> {new Date(selectedReport.created_at).toLocaleString()}</p>
               </div>
 
@@ -358,7 +360,7 @@ const PolicePanel = () => {
                 />
               </div>
 
-              {(selectedReport.status === "Submitted" || selectedReport.status === "Pending") && (
+              {(selectedReport.status === "Submitted" || selectedReport.status === "Pending" || selectedReport.status === "Assigned") && (
                 <div className="mt-6 flex gap-3">
                   <button
                     disabled={busyId === selectedReport.id}

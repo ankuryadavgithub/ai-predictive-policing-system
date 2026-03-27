@@ -57,12 +57,88 @@ def _serialize_report(report: CrimeReport) -> dict:
         "status": report.status,
         "assigned_station": report.assigned_station,
         "assigned_district": report.assigned_district,
+        "assigned_police_id": report.assigned_police_id,
+        "assigned_police_username": report.assigned_officer.username if report.assigned_officer else None,
+        "assigned_police_name": report.assigned_officer.full_name if report.assigned_officer else None,
         "verification_notes": report.verification_notes,
         "created_at": report.created_at,
         "updated_at": report.updated_at,
         "evidence_count": len([item for item in report.evidence if not item.is_archived]),
         "evidence": [_serialize_evidence(item) for item in report.evidence if not item.is_archived],
     }
+
+
+def _candidate_officers_for_report(db: Session, *, city: str | None, district: str | None):
+    query = db.query(User).filter(
+        User.role == "police",
+        User.status == "approved",
+    )
+
+    if city:
+        city_matches = query.filter(User.city.isnot(None), User.city.ilike(city)).all()
+        if city_matches:
+            return city_matches
+
+    if district:
+        district_matches = query.filter(User.district.isnot(None), User.district.ilike(district)).all()
+        if district_matches:
+            return district_matches
+
+    return []
+
+
+def _select_best_officer(db: Session, officers: list[User]) -> User | None:
+    if not officers:
+        return None
+
+    best_officer = None
+    best_open_count = None
+
+    for officer in officers:
+        open_count = (
+            db.query(CrimeReport)
+            .filter(
+                CrimeReport.assigned_police_id == officer.id,
+                CrimeReport.status.in_(["Assigned", "Submitted"]),
+            )
+            .count()
+        )
+
+        if best_open_count is None or open_count < best_open_count:
+            best_open_count = open_count
+            best_officer = officer
+
+    return best_officer
+
+
+def _assign_report_to_officer(report: CrimeReport, officer: User | None, notes: str | None = None) -> None:
+    if officer is None:
+        report.assigned_police_id = None
+        if report.status == "Assigned":
+            report.status = "Submitted"
+        if notes:
+            report.verification_notes = notes
+        return
+
+    report.assigned_police_id = officer.id
+    report.assigned_district = officer.district
+    report.assigned_station = officer.station
+    if report.status not in {"Verified", "Rejected", "Resolved"}:
+        report.status = "Assigned"
+    if notes:
+        report.verification_notes = notes
+
+
+def _auto_assign_report(db: Session, report: CrimeReport) -> User | None:
+    candidates = _candidate_officers_for_report(
+        db,
+        city=report.city,
+        district=report.assigned_district,
+    )
+    selected_officer = _select_best_officer(db, candidates)
+    if selected_officer:
+        _assign_report_to_officer(report, selected_officer)
+    return selected_officer
 
 
 def _save_upload(file: UploadFile, report_id: str) -> tuple[Path, int, str]:
@@ -151,6 +227,12 @@ def create_report(
     db.commit()
     db.refresh(new_report)
 
+    assigned_officer = None
+    if user.role != "police":
+        assigned_officer = _auto_assign_report(db, new_report)
+        db.commit()
+        db.refresh(new_report)
+
     for upload in files:
         saved_path, size, file_type = _save_upload(upload, report_id)
         evidence_row = EvidenceFile(
@@ -165,8 +247,17 @@ def create_report(
         db.add(evidence_row)
 
     db.commit()
-    logger.info("Report submitted report_id=%s user_id=%s", report_id, user.id)
-    return {"message": "Report submitted successfully", "report_id": report_id}
+    logger.info(
+        "Report submitted report_id=%s user_id=%s assigned_police_id=%s",
+        report_id,
+        user.id,
+        assigned_officer.id if assigned_officer else None,
+    )
+    return {
+        "message": "Report submitted successfully",
+        "report_id": report_id,
+        "assigned_police_id": new_report.assigned_police_id,
+    }
 
 
 @router.get("/")
@@ -184,12 +275,21 @@ def get_reports(
     if user.role == "citizen":
         query = query.filter(CrimeReport.reporter_user_id == user.id)
     elif user.role == "police":
-        if user.district:
-            query = query.filter(CrimeReport.assigned_district == user.district)
-        elif user.station:
-            query = query.filter(CrimeReport.assigned_station == user.station)
-        else:
+        if not user.district and not user.station:
             raise HTTPException(status_code=403, detail="Police account missing station or district assignment")
+        area_match = None
+        if user.district:
+            area_match = CrimeReport.assigned_district == user.district
+        elif user.station:
+            area_match = CrimeReport.assigned_station == user.station
+
+        query = query.filter(
+            (CrimeReport.assigned_police_id == user.id)
+            | (
+                (CrimeReport.assigned_police_id.is_(None))
+                & area_match
+            )
+        )
     else:
         require_role(user, ["police", "admin"])
 

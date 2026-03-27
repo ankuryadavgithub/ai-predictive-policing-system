@@ -48,6 +48,7 @@ class User(Base):
 
     reports = relationship("CrimeReport", back_populates="reporter", foreign_keys="CrimeReport.reporter_user_id")
     reviewed_reports = relationship("CrimeReport", foreign_keys="CrimeReport.reviewed_by")
+    assigned_reports = relationship("CrimeReport", foreign_keys="CrimeReport.assigned_police_id")
 
 
 class Crime(Base):
@@ -102,6 +103,7 @@ class CrimeReport(Base):
     verification_notes = Column(Text)
     assigned_station = Column(String(255))
     assigned_district = Column(String(255))
+    assigned_police_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     reviewed_at = Column(DateTime(timezone=True))
 
@@ -114,6 +116,7 @@ class CrimeReport(Base):
     )
 
     reporter = relationship("User", back_populates="reports", foreign_keys=[reporter_user_id])
+    assigned_officer = relationship("User", foreign_keys=[assigned_police_id])
     evidence = relationship("EvidenceFile", back_populates="report", cascade="all, delete-orphan")
 
 

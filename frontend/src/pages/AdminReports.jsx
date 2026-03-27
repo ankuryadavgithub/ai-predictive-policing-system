@@ -6,19 +6,34 @@ import ProtectedMedia from "../components/ProtectedMedia";
 
 const AdminReports = () => {
   const [reports, setReports] = useState([]);
+  const [officers, setOfficers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [severityFilter, setSeverityFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [selectedReport, setSelectedReport] = useState(null);
+  const [assignmentDrafts, setAssignmentDrafts] = useState({});
+  const [busyId, setBusyId] = useState(null);
 
   const fetchReports = async () => {
     try {
       setLoading(true);
       setError("");
-      const res = await api.get("/admin/reports", { params: { page_size: 100 } });
-      setReports(res.data);
+      const [reportsRes, officersRes] = await Promise.all([
+        api.get("/admin/reports", { params: { page_size: 100 } }),
+        api.get("/admin/officers"),
+      ]);
+      setReports(reportsRes.data);
+      setOfficers(officersRes.data);
+      setAssignmentDrafts(
+        Object.fromEntries(
+          reportsRes.data.map((report) => [
+            report.id,
+            report.assigned_police_id ? String(report.assigned_police_id) : "",
+          ])
+        )
+      );
     } catch (err) {
       console.error(err);
       setError(err?.response?.data?.detail || "Failed to load reports");
@@ -42,25 +57,58 @@ const AdminReports = () => {
     });
   }, [reports, query, severityFilter, statusFilter]);
 
-  const mutateReport = async (id, request, nextStatus) => {
+  const mutateReport = async (id, request, updater) => {
     try {
+      setBusyId(id);
       setError("");
       await request();
-      setReports((prev) => {
-        if (nextStatus === "__deleted__") {
-          return prev.filter((report) => report.id !== id);
+      setReports((prev) => updater(prev));
+      setSelectedReport((prev) => {
+        if (!prev || prev.id !== id) {
+          return prev;
         }
-        return prev.map((report) =>
-          report.id === id ? { ...report, status: nextStatus } : report
-        );
+
+        const nextSelected = updater([prev]);
+        return nextSelected[0] || null;
       });
-      if (selectedReport?.id === id && nextStatus === "__deleted__") {
-        setSelectedReport(null);
-      }
     } catch (err) {
       console.error(err);
       setError(err?.response?.data?.detail || "Moderation action failed");
+    } finally {
+      setBusyId(null);
     }
+  };
+
+  const handleAssign = async (report) => {
+    const nextOfficerId = assignmentDrafts[report.id] ? Number(assignmentDrafts[report.id]) : null;
+    const nextOfficer = officers.find((officer) => officer.id === nextOfficerId) || null;
+
+    await mutateReport(
+      report.id,
+      () =>
+        api.patch(`/admin/reports/${report.id}/assign`, {
+          assigned_police_id: nextOfficerId,
+        }),
+      (prev) =>
+        prev.map((item) =>
+          item.id === report.id
+            ? {
+                ...item,
+                assigned_police_id: nextOfficer?.id || null,
+                assigned_police_username: nextOfficer?.username || null,
+                assigned_police_name: nextOfficer?.full_name || null,
+                assigned_district: nextOfficer?.district || item.assigned_district,
+                assigned_station: nextOfficer?.station || item.assigned_station,
+                status:
+                  item.status === "Verified" || item.status === "Rejected" || item.status === "Resolved"
+                    ? item.status
+                    : nextOfficer
+                    ? "Assigned"
+                    : "Submitted",
+              }
+            : item
+        )
+    );
   };
 
   return (
@@ -88,6 +136,7 @@ const AdminReports = () => {
           >
             <option value="all">All statuses</option>
             <option value="Submitted">Submitted</option>
+            <option value="Assigned">Assigned</option>
             <option value="Verified">Verified</option>
             <option value="Rejected">Rejected</option>
             <option value="Resolved">Resolved</option>
@@ -129,7 +178,7 @@ const AdminReports = () => {
                   <th className="p-4">Crime</th>
                   <th className="p-4">Severity</th>
                   <th className="p-4">Status</th>
-                  <th className="p-4">Evidence</th>
+                  <th className="p-4">Assigned Officer</th>
                   <th className="p-4">Actions</th>
                 </tr>
               </thead>
@@ -152,12 +201,75 @@ const AdminReports = () => {
                         {report.status}
                       </span>
                     </td>
-                    <td className="p-4 text-gray-700 dark:text-gray-200">{report.evidence_count}</td>
+                    <td className="p-4 text-sm text-gray-700 dark:text-gray-200">
+                      <p>{report.assigned_police_name || report.assigned_police_username || "Not assigned"}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{report.assigned_district || "No district"}</p>
+                    </td>
                     <td className="p-4 flex flex-wrap gap-3">
                       <button onClick={() => setSelectedReport(report)} className="text-blue-600">View</button>
-                      <button onClick={() => mutateReport(report.id, () => api.patch(`/admin/reports/${report.id}/resolve`), "Resolved")} className="text-green-600">Resolve</button>
-                      <button onClick={() => mutateReport(report.id, () => api.patch(`/admin/reports/${report.id}/fake`), "Rejected")} className="text-yellow-600">Mark Fake</button>
-                      <button onClick={() => mutateReport(report.id, () => api.delete(`/admin/reports/${report.id}`), "__deleted__")} className="text-red-600">Delete</button>
+                      <select
+                        value={assignmentDrafts[report.id] ?? ""}
+                        onChange={(e) =>
+                          setAssignmentDrafts((prev) => ({ ...prev, [report.id]: e.target.value }))
+                        }
+                        className="rounded border px-2 py-1 text-sm dark:bg-gray-800 dark:text-white"
+                      >
+                        <option value="">Unassigned</option>
+                        {officers.map((officer) => (
+                          <option key={officer.id} value={officer.id}>
+                            {officer.full_name} ({officer.username})
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        disabled={busyId === report.id}
+                        onClick={() => handleAssign(report)}
+                        className="text-indigo-600 disabled:opacity-50"
+                      >
+                        {busyId === report.id ? "Working..." : "Assign"}
+                      </button>
+                      <button
+                        onClick={() =>
+                          mutateReport(
+                            report.id,
+                            () => api.patch(`/admin/reports/${report.id}/resolve`),
+                            (prev) =>
+                              prev.map((item) =>
+                                item.id === report.id ? { ...item, status: "Resolved" } : item
+                              )
+                          )
+                        }
+                        className="text-green-600"
+                      >
+                        Resolve
+                      </button>
+                      <button
+                        onClick={() =>
+                          mutateReport(
+                            report.id,
+                            () => api.patch(`/admin/reports/${report.id}/fake`),
+                            (prev) =>
+                              prev.map((item) =>
+                                item.id === report.id ? { ...item, status: "Rejected" } : item
+                              )
+                          )
+                        }
+                        className="text-yellow-600"
+                      >
+                        Mark Fake
+                      </button>
+                      <button
+                        onClick={() =>
+                          mutateReport(
+                            report.id,
+                            () => api.delete(`/admin/reports/${report.id}`),
+                            (prev) => prev.filter((item) => item.id !== report.id)
+                          )
+                        }
+                        className="text-red-600"
+                      >
+                        Delete
+                      </button>
                     </td>
                   </motion.tr>
                 )).filter(Boolean)}
@@ -194,6 +306,7 @@ const AdminReports = () => {
                 <p><strong>Status:</strong> {selectedReport.status}</p>
                 <p><strong>City:</strong> {selectedReport.city || "Unknown"}</p>
                 <p><strong>Assigned District:</strong> {selectedReport.assigned_district || "Not assigned"}</p>
+                <p><strong>Assigned Officer:</strong> {selectedReport.assigned_police_name || selectedReport.assigned_police_username || "Not assigned"}</p>
                 <p><strong>Notes:</strong> {selectedReport.verification_notes || "No moderation notes yet"}</p>
                 <div>
                   <p className="font-semibold text-gray-800 dark:text-white mb-2">Description</p>

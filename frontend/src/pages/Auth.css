@@ -31,13 +31,38 @@
 }
 
 .auth-panel-info {
+  position: relative;
   display: flex;
   align-items: center;
   padding: 56px min(7vw, 88px);
+  overflow: hidden;
 }
 
 .auth-panel-inner {
+  position: relative;
+  z-index: 1;
   width: min(100%, 640px);
+}
+
+.auth-globe-layer {
+  position: absolute;
+  right: -140px;
+  top: 50%;
+  z-index: 0;
+  opacity: 0.18;
+  transform: translateY(-50%);
+  pointer-events: none;
+  filter: saturate(0.8);
+}
+
+.auth-globe-layer > div {
+  width: 520px !important;
+  height: 520px !important;
+}
+
+.auth-globe-layer canvas {
+  width: 100% !important;
+  height: 100% !important;
 }
 
 .auth-kicker,
@@ -507,6 +532,13 @@
     width: min(100%, 760px);
     max-height: none;
   }
+
+  .auth-globe-layer {
+    right: -120px;
+    top: 16px;
+    transform: none;
+    opacity: 0.12;
+  }
 }
 
 @media (max-width: 720px) {
@@ -539,5 +571,9 @@
 
   .role-card {
     grid-template-columns: 1fr;
+  }
+
+  .auth-globe-layer {
+    display: none;
   }
 }

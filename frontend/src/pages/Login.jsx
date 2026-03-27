@@ -5,6 +5,7 @@ import { LockKeyhole, ShieldCheck, UserRound } from "lucide-react";
 
 import { useAuth } from "../context/AuthContext";
 import CinematicBackground from "../components/CinematicBackground";
+import CrimeGlobe from "../components/CrimeGlobe";
 import SatelliteScan from "../components/SatelliteScan";
 
 import "./Auth.css";
@@ -65,6 +66,10 @@ const Login = () => {
 
       <div className="auth-shell">
         <section className="auth-panel auth-panel-info">
+          <div className="auth-globe-layer" aria-hidden="true">
+            <CrimeGlobe />
+          </div>
+
           <div className="auth-panel-inner">
             <span className="auth-kicker">Secure access</span>
             <h1 className="auth-hero-title">Sign in to the predictive policing network.</h1>

@@ -14,6 +14,7 @@ import {
 
 import { registerUser } from "../utils/auth";
 import CinematicBackground from "../components/CinematicBackground";
+import CrimeGlobe from "../components/CrimeGlobe";
 import SatelliteScan from "../components/SatelliteScan";
 
 import "./Auth.css";
@@ -117,6 +118,10 @@ const Register = () => {
 
       <div className="auth-shell">
         <section className="auth-panel auth-panel-info">
+          <div className="auth-globe-layer" aria-hidden="true">
+            <CrimeGlobe />
+          </div>
+
           <div className="auth-panel-inner">
             <span className="auth-kicker">Registration</span>
             <h1 className="auth-hero-title">Create the right access profile for your role.</h1>

@@ -1,45 +1,44 @@
+import { useNavigate } from "react-router-dom";
+
+const navItems = [
+  { label: "Capabilities", id: "capabilities" },
+  { label: "Workflow", id: "workflow" },
+  { label: "Audience", id: "audiences" },
+  { label: "About", id: "about" },
+];
+
 const Navbar = () => {
+  const navigate = useNavigate();
 
-const scrollToSection = (id) => {
+  const scrollToSection = (id) => {
+    document.getElementById(id)?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  };
 
-document.getElementById(id).scrollIntoView({
-behavior: "smooth"
-});
+  return (
+    <header className="navbar">
+      <button className="logo" onClick={() => scrollToSection("hero")} type="button">
+        <span className="logo-mark" />
+        <span>Crime AI Command</span>
+      </button>
 
-};
+      <nav className="nav-links" aria-label="Landing page">
+        {navItems.map((item) => (
+          <button key={item.id} type="button" onClick={() => scrollToSection(item.id)}>
+            {item.label}
+          </button>
+        ))}
+      </nav>
 
-return(
-
-<div className="navbar">
-
-<div className="logo">
-Predictive Policing
-</div>
-
-<div className="nav-links">
-
-<a onClick={()=>scrollToSection("features")}>
-Features
-</a>
-
-<a onClick={()=>scrollToSection("solutions")}>
-Solutions
-</a>
-
-<a onClick={()=>scrollToSection("about")}>
-About
-</a>
-
-<a onClick={()=>scrollToSection("contact")}>
-Contact
-</a>
-
-</div>
-
-</div>
-
-);
-
+      <div className="nav-actions">
+        <button className="nav-login" onClick={() => navigate("/login")} type="button">
+          Login
+        </button>
+      </div>
+    </header>
+  );
 };
 
 export default Navbar;

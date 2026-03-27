@@ -1,17 +1,19 @@
 import mimetypes
 import os
 import uuid
+from math import asin, cos, radians, sin, sqrt
 from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.audit import logger
 from app.config import UPLOADS_DIR, settings
 from app.dependencies import get_current_user, get_db
-from app.models import CrimeReport, EvidenceFile, User
+from app.models import Crime, CrimeReport, EvidenceFile, User
 from app.rate_limit import enforce_rate_limit
 from app.role_guard import can_access_report, require_role
 
@@ -25,6 +27,8 @@ ALLOWED_CONTENT_TYPES = {
     "video/mp4": "video",
     "video/webm": "video",
 }
+
+LIVE_LOCATION_MAX_AGE_MINUTES = 20
 
 
 def _serialize_evidence(file: EvidenceFile) -> dict:
@@ -68,6 +72,18 @@ def _serialize_report(report: CrimeReport) -> dict:
     }
 
 
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    earth_radius_km = 6371.0
+    delta_lat = radians(lat2 - lat1)
+    delta_lon = radians(lon2 - lon1)
+    lat1_rad = radians(lat1)
+    lat2_rad = radians(lat2)
+
+    a = sin(delta_lat / 2) ** 2 + cos(lat1_rad) * cos(lat2_rad) * sin(delta_lon / 2) ** 2
+    c = 2 * asin(sqrt(a))
+    return earth_radius_km * c
+
+
 def _candidate_officers_for_report(db: Session, *, city: str | None, district: str | None):
     query = db.query(User).filter(
         User.role == "police",
@@ -75,16 +91,81 @@ def _candidate_officers_for_report(db: Session, *, city: str | None, district: s
     )
 
     if city:
+        city_matches = query.filter(User.patrol_city.isnot(None), User.patrol_city.ilike(city)).all()
+        if city_matches:
+            return city_matches
         city_matches = query.filter(User.city.isnot(None), User.city.ilike(city)).all()
         if city_matches:
             return city_matches
 
     if district:
+        district_matches = query.filter(User.patrol_district.isnot(None), User.patrol_district.ilike(district)).all()
+        if district_matches:
+            return district_matches
         district_matches = query.filter(User.district.isnot(None), User.district.ilike(district)).all()
         if district_matches:
             return district_matches
 
     return []
+
+
+def _resolve_report_location(db: Session, *, latitude: float, longitude: float) -> tuple[str | None, str | None, str | None]:
+    nearest_match = (
+        db.query(CrimeReport)
+        .filter(
+            CrimeReport.latitude.isnot(None),
+            CrimeReport.longitude.isnot(None),
+            CrimeReport.city.isnot(None),
+            CrimeReport.assigned_district.isnot(None),
+        )
+        .order_by(
+            func.pow(CrimeReport.latitude - latitude, 2) + func.pow(CrimeReport.longitude - longitude, 2)
+        )
+        .first()
+    )
+
+    if nearest_match:
+        return nearest_match.city, nearest_match.assigned_district, nearest_match.state
+
+    nearest_crime = (
+        db.query(Crime)
+        .filter(
+            Crime.latitude.isnot(None),
+            Crime.longitude.isnot(None),
+            Crime.city.isnot(None),
+        )
+        .order_by(
+            func.pow(Crime.latitude - latitude, 2) + func.pow(Crime.longitude - longitude, 2)
+        )
+        .first()
+    )
+
+    if nearest_crime:
+        return nearest_crime.city, nearest_crime.district, nearest_crime.state
+
+    return None, None, None
+
+
+def _recent_live_officers(db: Session) -> list[User]:
+    cutoff = datetime.now(timezone.utc).timestamp() - (LIVE_LOCATION_MAX_AGE_MINUTES * 60)
+    officers = (
+        db.query(User)
+        .filter(
+            User.role == "police",
+            User.status == "approved",
+            User.gps_consent.is_(True),
+            User.current_latitude.isnot(None),
+            User.current_longitude.isnot(None),
+            User.location_updated_at.isnot(None),
+        )
+        .all()
+    )
+
+    return [
+        officer
+        for officer in officers
+        if officer.location_updated_at and officer.location_updated_at.timestamp() >= cutoff
+    ]
 
 
 def _select_best_officer(db: Session, officers: list[User]) -> User | None:
@@ -111,6 +192,33 @@ def _select_best_officer(db: Session, officers: list[User]) -> User | None:
     return best_officer
 
 
+def _select_nearest_live_officer(
+    db: Session,
+    *,
+    latitude: float,
+    longitude: float,
+) -> User | None:
+    officers = _recent_live_officers(db)
+    if not officers:
+        return None
+
+    ranked = sorted(
+        officers,
+        key=lambda officer: (
+            _haversine_km(latitude, longitude, officer.current_latitude, officer.current_longitude),
+            (
+                db.query(CrimeReport)
+                .filter(
+                    CrimeReport.assigned_police_id == officer.id,
+                    CrimeReport.status.in_(["Assigned", "Submitted"]),
+                )
+                .count()
+            ),
+        ),
+    )
+    return ranked[0] if ranked else None
+
+
 def _assign_report_to_officer(report: CrimeReport, officer: User | None, notes: str | None = None) -> None:
     if officer is None:
         report.assigned_police_id = None
@@ -121,7 +229,7 @@ def _assign_report_to_officer(report: CrimeReport, officer: User | None, notes: 
         return
 
     report.assigned_police_id = officer.id
-    report.assigned_district = officer.district
+    report.assigned_district = officer.patrol_district or officer.district
     report.assigned_station = officer.station
     if report.status not in {"Verified", "Rejected", "Resolved"}:
         report.status = "Assigned"
@@ -130,6 +238,16 @@ def _assign_report_to_officer(report: CrimeReport, officer: User | None, notes: 
 
 
 def _auto_assign_report(db: Session, report: CrimeReport) -> User | None:
+    if report.latitude is not None and report.longitude is not None:
+        live_officer = _select_nearest_live_officer(
+            db,
+            latitude=report.latitude,
+            longitude=report.longitude,
+        )
+        if live_officer:
+            _assign_report_to_officer(report, live_officer)
+            return live_officer
+
     candidates = _candidate_officers_for_report(
         db,
         city=report.city,
@@ -216,12 +334,21 @@ def create_report(
         description=description.strip(),
         latitude=latitude,
         longitude=longitude,
-        city=user.city,
+        city=None,
         state=None,
         status="Submitted",
         assigned_station=user.station if user.role == "police" else None,
-        assigned_district=user.district,
+        assigned_district=None,
     )
+
+    resolved_city, resolved_district, resolved_state = _resolve_report_location(
+        db,
+        latitude=latitude,
+        longitude=longitude,
+    )
+    new_report.city = resolved_city or user.city
+    new_report.assigned_district = resolved_district or user.district
+    new_report.state = resolved_state
 
     db.add(new_report)
     db.commit()
@@ -275,21 +402,14 @@ def get_reports(
     if user.role == "citizen":
         query = query.filter(CrimeReport.reporter_user_id == user.id)
     elif user.role == "police":
-        if not user.district and not user.station:
-            raise HTTPException(status_code=403, detail="Police account missing station or district assignment")
-        area_match = None
-        if user.district:
-            area_match = CrimeReport.assigned_district == user.district
-        elif user.station:
-            area_match = CrimeReport.assigned_station == user.station
-
-        query = query.filter(
-            (CrimeReport.assigned_police_id == user.id)
-            | (
+        patrol_district = user.patrol_district or user.district
+        filters = [CrimeReport.assigned_police_id == user.id]
+        if patrol_district:
+            filters.append(
                 (CrimeReport.assigned_police_id.is_(None))
-                & area_match
+                & (CrimeReport.assigned_district == patrol_district)
             )
-        )
+        query = query.filter(*filters) if len(filters) == 1 else query.filter(filters[0] | filters[1])
     else:
         require_role(user, ["police", "admin"])
 

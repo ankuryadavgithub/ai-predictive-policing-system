@@ -24,6 +24,47 @@ export const AuthProvider = ({ children }) => {
     refreshUser();
   }, []);
 
+  useEffect(() => {
+    if (!user || user.role !== "police" || !user.gps_consent || !navigator.geolocation) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const pushLocation = () => {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          if (cancelled) {
+            return;
+          }
+
+          try {
+            await api.post("/auth/location", {
+              latitude: Number(position.coords.latitude.toFixed(6)),
+              longitude: Number(position.coords.longitude.toFixed(6)),
+            });
+          } catch (err) {
+            console.error("Failed to sync police live location", err);
+          }
+        },
+        () => {},
+        {
+          enableHighAccuracy: true,
+          maximumAge: 60 * 1000,
+          timeout: 10 * 1000,
+        }
+      );
+    };
+
+    pushLocation();
+    const intervalId = window.setInterval(pushLocation, 2 * 60 * 1000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [user]);
+
   const login = async (credentials) => {
     const res = await api.post("/auth/login", credentials);
     if (res.data?.access_token) {

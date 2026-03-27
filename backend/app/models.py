@@ -37,6 +37,13 @@ class User(Base):
     district = Column(String(255))
     city = Column(String(255))
     department = Column(String(255))
+    patrol_state = Column(String(255))
+    patrol_district = Column(String(255))
+    patrol_city = Column(String(255))
+    patrol_station = Column(String(255))
+    current_latitude = Column(Float)
+    current_longitude = Column(Float)
+    location_updated_at = Column(DateTime(timezone=True))
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(

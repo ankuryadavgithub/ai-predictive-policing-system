@@ -10,10 +10,61 @@ from app.config import settings
 from app.dependencies import get_current_user, get_db
 from app.models import Crime, CrimeReport, EvidenceFile, User
 from app.role_guard import require_role
-from app.schemas import ReportAssignmentRequest, UserSummary
+from app.schemas import PatrolAreaUpdateRequest, ReportAssignmentRequest, UserSummary
 
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
+
+
+def _validate_patrol_area(db: Session, payload: PatrolAreaUpdateRequest) -> None:
+    if payload.patrol_city and not payload.patrol_state:
+        raise HTTPException(status_code=400, detail="Patrol state is required when assigning a patrol city")
+
+    if payload.patrol_district and not payload.patrol_state:
+        raise HTTPException(status_code=400, detail="Patrol state is required when assigning a patrol district")
+
+    if payload.patrol_city and not payload.patrol_district:
+        raise HTTPException(status_code=400, detail="Patrol district is required when assigning a patrol city")
+
+    if payload.patrol_state:
+        state_exists = (
+            db.query(Crime.id)
+            .filter(Crime.state == payload.patrol_state)
+            .first()
+        )
+        if not state_exists:
+            raise HTTPException(status_code=400, detail="Selected patrol state was not found in crime data")
+
+    if payload.patrol_district:
+        district_exists = (
+            db.query(Crime.id)
+            .filter(
+                Crime.state == payload.patrol_state,
+                Crime.district == payload.patrol_district,
+            )
+            .first()
+        )
+        if not district_exists:
+            raise HTTPException(
+                status_code=400,
+                detail="Selected patrol district does not belong to the selected patrol state",
+            )
+
+    if payload.patrol_city:
+        city_exists = (
+            db.query(Crime.id)
+            .filter(
+                Crime.state == payload.patrol_state,
+                Crime.district == payload.patrol_district,
+                Crime.city == payload.patrol_city,
+            )
+            .first()
+        )
+        if not city_exists:
+            raise HTTPException(
+                status_code=400,
+                detail="Selected patrol city does not belong to the selected patrol district",
+            )
 
 
 def _serialize_report(report: CrimeReport) -> dict:
@@ -99,6 +150,53 @@ def get_assignable_officers(
     return [UserSummary.model_validate(item).model_dump(mode="json") for item in officers]
 
 
+@router.get("/patrol/states")
+def get_patrol_states(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    require_role(user, ["admin"])
+    states = (
+        db.query(Crime.state)
+        .filter(Crime.state.isnot(None), Crime.state != "")
+        .distinct()
+        .order_by(Crime.state.asc())
+        .all()
+    )
+    return [row[0] for row in states if row[0]]
+
+
+@router.get("/patrol/districts")
+def get_patrol_districts(
+    state: str | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    require_role(user, ["admin"])
+    query = db.query(Crime.district).filter(Crime.district.isnot(None), Crime.district != "")
+    if state:
+        query = query.filter(Crime.state == state)
+    districts = query.distinct().order_by(Crime.district.asc()).all()
+    return [row[0] for row in districts if row[0]]
+
+
+@router.get("/patrol/cities")
+def get_patrol_cities(
+    state: str | None = None,
+    district: str | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    require_role(user, ["admin"])
+    query = db.query(Crime.city).filter(Crime.city.isnot(None), Crime.city != "")
+    if state:
+        query = query.filter(Crime.state == state)
+    if district:
+        query = query.filter(Crime.district == district)
+    cities = query.distinct().order_by(Crime.city.asc()).all()
+    return [row[0] for row in cities if row[0]]
+
+
 @router.delete("/users/{id}")
 def delete_user(
     id: int,
@@ -154,6 +252,38 @@ def suspend_user(
     db.commit()
     logger.info("Admin suspended user target_id=%s actor=%s", id, user.username)
     return {"message": "User suspended"}
+
+
+@router.patch("/users/{id}/patrol-area")
+def update_patrol_area(
+    id: int,
+    payload: PatrolAreaUpdateRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    require_role(user, ["admin"])
+    officer = db.query(User).filter(User.id == id, User.role == "police").first()
+    if not officer:
+        raise HTTPException(status_code=404, detail="Police officer not found")
+
+    _validate_patrol_area(db, payload)
+
+    officer.patrol_state = payload.patrol_state
+    officer.patrol_district = payload.patrol_district
+    officer.patrol_city = payload.patrol_city
+    db.commit()
+
+    logger.info(
+        "Admin updated patrol area target_id=%s actor=%s patrol_city=%s patrol_district=%s",
+        officer.id,
+        user.username,
+        officer.patrol_city,
+        officer.patrol_district,
+    )
+    return {
+        "message": "Patrol area updated",
+        "user": UserSummary.model_validate(officer).model_dump(mode="json"),
+    }
 
 
 @router.get("/analytics")
@@ -309,7 +439,7 @@ def assign_report(
 
     report.assigned_police_id = officer.id if officer else None
     report.assigned_station = officer.station if officer else report.assigned_station
-    report.assigned_district = officer.district if officer else report.assigned_district
+    report.assigned_district = (officer.patrol_district or officer.district) if officer else report.assigned_district
     if report.status not in {"Verified", "Rejected", "Resolved"}:
         report.status = "Assigned" if officer else "Submitted"
     if payload.notes:

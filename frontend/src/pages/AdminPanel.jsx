@@ -11,6 +11,12 @@ const container = {
   }
 };
 
+const emptyPatrolArea = {
+  patrol_state: "",
+  patrol_district: "",
+  patrol_city: "",
+};
+
 const AdminPanel = () => {
   const [users, setUsers] = useState([]);
   const [stats, setStats] = useState({});
@@ -20,19 +26,26 @@ const AdminPanel = () => {
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [busyId, setBusyId] = useState(null);
+  const [editingOfficerId, setEditingOfficerId] = useState(null);
+  const [patrolDraft, setPatrolDraft] = useState(emptyPatrolArea);
+  const [stateOptions, setStateOptions] = useState([]);
+  const [districtOptions, setDistrictOptions] = useState([]);
+  const [cityOptions, setCityOptions] = useState([]);
 
   const loadPage = async () => {
     try {
       setLoading(true);
       setError("");
 
-      const [usersRes, statsRes] = await Promise.all([
+      const [usersRes, statsRes, statesRes] = await Promise.all([
         api.get("/admin/users", { params: { page_size: 100 } }),
         api.get("/admin/analytics"),
+        api.get("/admin/patrol/states"),
       ]);
 
       setUsers(usersRes.data);
       setStats(statsRes.data);
+      setStateOptions(statesRes.data);
     } catch (err) {
       console.error(err);
       setError(err?.response?.data?.detail || "Failed to load admin panel");
@@ -45,9 +58,62 @@ const AdminPanel = () => {
     loadPage();
   }, []);
 
+  useEffect(() => {
+    if (!editingOfficerId) {
+      setDistrictOptions([]);
+      setCityOptions([]);
+      return;
+    }
+
+    const loadDistricts = async () => {
+      try {
+        const res = await api.get("/admin/patrol/districts", {
+          params: { state: patrolDraft.patrol_state || undefined },
+        });
+        setDistrictOptions(res.data);
+      } catch (err) {
+        console.error("Failed to load patrol districts", err);
+        setDistrictOptions([]);
+      }
+    };
+
+    loadDistricts();
+  }, [editingOfficerId, patrolDraft.patrol_state]);
+
+  useEffect(() => {
+    if (!editingOfficerId) {
+      return;
+    }
+
+    const loadCities = async () => {
+      try {
+        const res = await api.get("/admin/patrol/cities", {
+          params: {
+            state: patrolDraft.patrol_state || undefined,
+            district: patrolDraft.patrol_district || undefined,
+          },
+        });
+        setCityOptions(res.data);
+      } catch (err) {
+        console.error("Failed to load patrol cities", err);
+        setCityOptions([]);
+      }
+    };
+
+    loadCities();
+  }, [editingOfficerId, patrolDraft.patrol_state, patrolDraft.patrol_district]);
+
   const filteredUsers = useMemo(() => {
     return users.filter((user) => {
-      const matchesQuery = [user.username, user.full_name, user.email, user.station, user.district]
+      const matchesQuery = [
+        user.username,
+        user.full_name,
+        user.email,
+        user.station,
+        user.district,
+        user.patrol_city,
+        user.patrol_district,
+      ]
         .filter(Boolean)
         .some((value) => value.toLowerCase().includes(query.toLowerCase()));
       const matchesRole = roleFilter === "all" || user.role === roleFilter;
@@ -71,6 +137,64 @@ const AdminPanel = () => {
     }
   };
 
+  const startEditPatrolArea = (user) => {
+    setEditingOfficerId(user.id);
+    setPatrolDraft({
+      patrol_state: user.patrol_state || "",
+      patrol_district: user.patrol_district || "",
+      patrol_city: user.patrol_city || "",
+    });
+  };
+
+  const savePatrolArea = async (user) => {
+    await runAction(
+      user.id,
+      () => api.patch(`/admin/users/${user.id}/patrol-area`, patrolDraft),
+      (prev) =>
+        prev.map((item) =>
+          item.id === user.id
+            ? {
+                ...item,
+                ...patrolDraft,
+              }
+            : item
+        )
+    );
+    setEditingOfficerId(null);
+    setPatrolDraft(emptyPatrolArea);
+  };
+
+  const cancelPatrolEdit = () => {
+    setEditingOfficerId(null);
+    setPatrolDraft(emptyPatrolArea);
+  };
+
+  const updatePatrolField = (field, value) => {
+    setPatrolDraft((prev) => {
+      if (field === "patrol_state") {
+        return {
+          ...prev,
+          patrol_state: value,
+          patrol_district: "",
+          patrol_city: "",
+        };
+      }
+
+      if (field === "patrol_district") {
+        return {
+          ...prev,
+          patrol_district: value,
+          patrol_city: "",
+        };
+      }
+
+      return {
+        ...prev,
+        [field]: value,
+      };
+    });
+  };
+
   return (
     <MainLayout>
       <motion.div
@@ -82,7 +206,7 @@ const AdminPanel = () => {
           Administrator Command Center
         </h1>
         <p className="text-gray-500 dark:text-gray-400 mt-2">
-          Review onboarding, manage account health, and monitor policing operations.
+          Review onboarding, manage account health, and assign operational patrol areas to police teams.
         </p>
       </motion.div>
 
@@ -161,8 +285,8 @@ const AdminPanel = () => {
                   <th className="p-4">User</th>
                   <th className="p-4">Role</th>
                   <th className="p-4">Status</th>
-                  <th className="p-4">Location</th>
-                  <th className="p-4">Organization</th>
+                  <th className="p-4">Registered Area</th>
+                  <th className="p-4">Patrol Area</th>
                   <th className="p-4">Actions</th>
                 </tr>
               </thead>
@@ -170,7 +294,7 @@ const AdminPanel = () => {
                 {filteredUsers.map((user) => (
                   <tr
                     key={user.id}
-                    className="border-t border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+                    className="border-t border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition align-top"
                   >
                     <td className="p-4">
                       <p className="font-medium text-gray-700 dark:text-white">{user.username}</p>
@@ -182,10 +306,68 @@ const AdminPanel = () => {
                     <td className="p-4 text-sm text-gray-500 dark:text-gray-300">
                       <p>{user.city || "No city"}</p>
                       <p>{user.district || "No district"}</p>
-                    </td>
-                    <td className="p-4 text-sm text-gray-500 dark:text-gray-300">
                       <p>{user.station || "No station"}</p>
-                      <p>{user.department || "No department"}</p>
+                    </td>
+                    <td className="p-4 text-sm text-gray-500 dark:text-gray-300 min-w-80">
+                      {user.role !== "police" ? (
+                        <span className="text-gray-400">Not applicable</span>
+                      ) : editingOfficerId === user.id ? (
+                        <div className="grid grid-cols-1 gap-2">
+                          <select
+                            value={patrolDraft.patrol_state}
+                            onChange={(e) => updatePatrolField("patrol_state", e.target.value)}
+                            className="bg-white dark:bg-gray-800 dark:text-white px-3 py-2 border rounded"
+                          >
+                            <option value="">Select patrol state</option>
+                            {stateOptions.map((state) => (
+                              <option key={state} value={state}>{state}</option>
+                            ))}
+                          </select>
+
+                          <select
+                            value={patrolDraft.patrol_district}
+                            onChange={(e) => updatePatrolField("patrol_district", e.target.value)}
+                            className="bg-white dark:bg-gray-800 dark:text-white px-3 py-2 border rounded"
+                          >
+                            <option value="">Select patrol district</option>
+                            {districtOptions.map((district) => (
+                              <option key={district} value={district}>{district}</option>
+                            ))}
+                          </select>
+
+                          <select
+                            value={patrolDraft.patrol_city}
+                            onChange={(e) => updatePatrolField("patrol_city", e.target.value)}
+                            className="bg-white dark:bg-gray-800 dark:text-white px-3 py-2 border rounded"
+                          >
+                            <option value="">Select patrol city</option>
+                            {cityOptions.map((city) => (
+                              <option key={city} value={city}>{city}</option>
+                            ))}
+                          </select>
+
+                          <div className="flex gap-2">
+                            <ActionButton
+                              color="green"
+                              label={busyId === user.id ? "Saving..." : "Save Area"}
+                              disabled={busyId === user.id}
+                              onClick={() => savePatrolArea(user)}
+                            />
+                            <ActionButton
+                              color="slate"
+                              label="Cancel"
+                              disabled={busyId === user.id}
+                              onClick={cancelPatrolEdit}
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <p>{user.patrol_city || "-"}</p>
+                          <p>{user.patrol_district || "-"}</p>
+                          <p className="text-xs text-gray-400">{user.patrol_state || "-"}</p>
+                        </div>
+                      )}
                     </td>
                     <td className="p-4 flex flex-wrap gap-2">
                       {user.status === "pending" && (
@@ -200,6 +382,14 @@ const AdminPanel = () => {
                               (prev) => prev.map((item) => item.id === user.id ? { ...item, status: "approved" } : item)
                             )
                           }
+                        />
+                      )}
+                      {user.role === "police" && editingOfficerId !== user.id && (
+                        <ActionButton
+                          color="blue"
+                          label="Assign Area"
+                          disabled={busyId === user.id}
+                          onClick={() => startEditPatrolArea(user)}
                         />
                       )}
                       <ActionButton
@@ -294,6 +484,8 @@ const ActionButton = ({ label, color, onClick, disabled }) => {
     green: "text-green-600 hover:bg-green-50",
     yellow: "text-yellow-600 hover:bg-yellow-50",
     red: "text-red-600 hover:bg-red-50",
+    blue: "text-blue-600 hover:bg-blue-50",
+    slate: "text-slate-600 hover:bg-slate-50",
   };
 
   return (

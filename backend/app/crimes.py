@@ -4,8 +4,10 @@ from sqlalchemy.orm import Session
 
 from app.cache import get_cache, set_cache
 from app.config import settings
-from app.dependencies import get_db
+from app.dependencies import get_current_user, get_db
 from app import models, schemas
+from app.models import User
+from app.role_guard import require_role
 
 
 router = APIRouter(prefix="/crimes", tags=["Crimes"])
@@ -23,7 +25,12 @@ def _apply_record_type(query, year: int | None, record_type: str):
 
 
 @router.post("/", response_model=schemas.CrimeResponse)
-def create_crime(crime: schemas.CrimeCreate, db: Session = Depends(get_db)):
+def create_crime(
+    crime: schemas.CrimeCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    require_role(user, ["admin"])
     new_crime = models.Crime(**crime.model_dump())
     db.add(new_crime)
     db.commit()

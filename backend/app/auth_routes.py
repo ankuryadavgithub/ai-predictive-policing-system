@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
@@ -6,7 +8,7 @@ from app.config import settings
 from app.dependencies import get_current_user, get_db, get_token_from_request
 from app.models import User
 from app.rate_limit import enforce_rate_limit
-from app.schemas import AuthUserResponse, LoginRequest, RegisterRequest
+from app.schemas import AuthUserResponse, LoginRequest, PoliceLocationUpdateRequest, RegisterRequest
 from app.security import (
     create_access_token,
     hash_password,
@@ -154,3 +156,27 @@ def logout(
 @router.get("/me", response_model=AuthUserResponse)
 def get_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@router.post("/location")
+def update_police_location(
+    payload: PoliceLocationUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != "police":
+        raise HTTPException(status_code=403, detail="Only police accounts can update live location")
+    if not current_user.gps_consent:
+        raise HTTPException(status_code=403, detail="GPS sharing is not enabled for this police account")
+    if not (-90 <= payload.latitude <= 90 and -180 <= payload.longitude <= 180):
+        raise HTTPException(status_code=400, detail="Invalid latitude or longitude")
+
+    current_user.current_latitude = payload.latitude
+    current_user.current_longitude = payload.longitude
+    current_user.location_updated_at = datetime.now(timezone.utc)
+    db.commit()
+
+    return {
+        "message": "Police live location updated",
+        "location_updated_at": current_user.location_updated_at.isoformat(),
+    }

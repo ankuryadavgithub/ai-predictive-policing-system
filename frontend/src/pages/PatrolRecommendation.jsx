@@ -149,7 +149,7 @@ const buildRecommendation = (city, forecast, trend = []) => {
 };
 
 const PatrolRecommendation = () => {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const isPoliceView = user?.role === "police";
   const [stateFilter, setStateFilter] = useState("All");
   const [cityFilter, setCityFilter] = useState("All");
@@ -161,10 +161,23 @@ const PatrolRecommendation = () => {
   const [error, setError] = useState("");
   const [policeAssignedCities, setPoliceAssignedCities] = useState([]);
   const [useAdminFallback, setUseAdminFallback] = useState(false);
+  const [assignedAreaResolved, setAssignedAreaResolved] = useState(false);
 
   const assignedAreaLabel = useMemo(() => {
     if (!isPoliceView) {
       return "";
+    }
+
+    if (user?.patrol_city) {
+      return user.patrol_city;
+    }
+
+    if (user?.patrol_district) {
+      return `${user.patrol_district} district`;
+    }
+
+    if (user?.patrol_state) {
+      return `${user.patrol_state} state`;
     }
 
     if (user?.city) {
@@ -176,7 +189,15 @@ const PatrolRecommendation = () => {
     }
 
     return "registered area";
-  }, [isPoliceView, user?.city, user?.district]);
+  }, [isPoliceView, user?.city, user?.district, user?.patrol_city, user?.patrol_district, user?.patrol_state]);
+
+  useEffect(() => {
+    if (!isPoliceView) {
+      return;
+    }
+
+    refreshUser();
+  }, [isPoliceView, user?.patrol_city, user?.patrol_district, user?.patrol_state]);
 
   useEffect(() => {
     if (isPoliceView) {
@@ -203,52 +224,121 @@ const PatrolRecommendation = () => {
   }, [isPoliceView, stateFilter]);
 
   useEffect(() => {
-    if (!isPoliceView || useAdminFallback) {
+    if (!isPoliceView) {
+      setAssignedAreaResolved(true);
+      return;
+    }
+
+    if (useAdminFallback) {
+      setAssignedAreaResolved(true);
       return;
     }
 
     const loadAssignedCities = async () => {
       try {
         setLoadingCities(true);
+        setAssignedAreaResolved(false);
+        setError("");
+
+        if (user?.patrol_city) {
+          setUseAdminFallback(false);
+          setPoliceAssignedCities([user.patrol_city]);
+          return;
+        }
+
+        if (user?.patrol_district) {
+          const res = await api.get("/crimes", {
+            params: { record_type: "predicted" },
+          });
+
+          const matchedCities = Array.from(
+            new Set(
+              (res.data || [])
+                .filter(
+                  (item) =>
+                    item?.district &&
+                    item.district.toLowerCase() === user.patrol_district.toLowerCase() &&
+                    item?.city
+                )
+                .map((item) => item.city)
+            )
+          ).sort((a, b) => a.localeCompare(b));
+
+          if (matchedCities.length > 0) {
+            setUseAdminFallback(false);
+          }
+          setPoliceAssignedCities(matchedCities);
+          return;
+        }
+
+        if (user?.patrol_state) {
+          const res = await api.get("/crimes/cities", {
+            params: {
+              state: user.patrol_state,
+              record_type: "predicted",
+            },
+          });
+          const stateCities = (res.data || []).slice(0, 12);
+          if (stateCities.length > 0) {
+            setUseAdminFallback(false);
+            setPoliceAssignedCities(stateCities);
+            return;
+          }
+        }
 
         if (user?.city) {
+          setUseAdminFallback(false);
           setPoliceAssignedCities([user.city]);
           return;
         }
 
-        if (!user?.district) {
-          setPoliceAssignedCities([]);
-          return;
+        if (user?.district) {
+          const res = await api.get("/crimes", {
+            params: { record_type: "predicted" },
+          });
+
+          const matchedCities = Array.from(
+            new Set(
+              (res.data || [])
+                .filter(
+                  (item) =>
+                    item?.district &&
+                    item.district.toLowerCase() === user.district.toLowerCase() &&
+                    item?.city
+                )
+                .map((item) => item.city)
+            )
+          ).sort((a, b) => a.localeCompare(b));
+
+          if (matchedCities.length > 0) {
+            setUseAdminFallback(false);
+            setPoliceAssignedCities(matchedCities);
+            return;
+          }
+
+          setPoliceAssignedCities(matchedCities);
         }
 
-        const res = await api.get("/crimes", {
-          params: { record_type: "predicted" },
-        });
-
-        const matchedCities = Array.from(
-          new Set(
-            (res.data || [])
-              .filter(
-                (item) =>
-                  item?.district &&
-                  item.district.toLowerCase() === user.district.toLowerCase() &&
-                  item?.city
-              )
-              .map((item) => item.city)
-          )
-        ).sort((a, b) => a.localeCompare(b));
-
-        setPoliceAssignedCities(matchedCities);
+        setPoliceAssignedCities([]);
+        setUseAdminFallback(true);
+        setError(
+          "Assigned-area data was unavailable, so full patrol explorer mode is enabled for this police account."
+        );
       } catch (err) {
         console.error("Failed to resolve assigned police area", err);
         setPoliceAssignedCities([]);
+        setUseAdminFallback(true);
+        setError(
+          "Assigned-area patrol data could not be loaded. Switched to full patrol explorer."
+        );
       } finally {
+        setAssignedAreaResolved(true);
         setLoadingCities(false);
       }
     };
 
     loadAssignedCities();
-  }, [isPoliceView, useAdminFallback, user?.city, user?.district]);
+  }, [isPoliceView, useAdminFallback, user?.city, user?.district, user?.patrol_city, user?.patrol_district, user?.patrol_state]);
 
   useEffect(() => {
     if (!isPoliceView || !useAdminFallback) {
@@ -287,6 +377,10 @@ const PatrolRecommendation = () => {
   }, [cities, cityFilter, isPoliceView, policeAssignedCities, useAdminFallback]);
 
   useEffect(() => {
+    if (isPoliceView && !useAdminFallback && !assignedAreaResolved) {
+      return;
+    }
+
     const loadRecommendations = async () => {
       try {
         setLoadingRecommendations(true);
@@ -302,14 +396,6 @@ const PatrolRecommendation = () => {
             : availableCities.slice(0, 8);
 
         if (targetCities.length === 0) {
-          if (isPoliceView && !useAdminFallback) {
-            setUseAdminFallback(true);
-            setError(
-              "No prediction data was found for the assigned police area. Switched to full patrol explorer."
-            );
-            return;
-          }
-
           setRecommendations([]);
           setSelectedCity("");
           setError("No recommendation data is available for the selected filters.");
@@ -342,9 +428,6 @@ const PatrolRecommendation = () => {
         }
 
         setRecommendations(nextRecommendations);
-        if (nextRecommendations.length > 0) {
-          setUseAdminFallback((prev) => (prev && isPoliceView ? prev : prev));
-        }
         setSelectedCity((prev) => {
           if (nextRecommendations.length === 0) {
             return "";
@@ -373,7 +456,7 @@ const PatrolRecommendation = () => {
     };
 
     loadRecommendations();
-  }, [cities, cityFilter, isPoliceView, policeAssignedCities, useAdminFallback]);
+  }, [assignedAreaResolved, cities, cityFilter, isPoliceView, policeAssignedCities, useAdminFallback]);
 
   const selectedRecommendation = useMemo(
     () => recommendations.find((item) => item.city === selectedCity) || recommendations[0],
@@ -425,7 +508,7 @@ const PatrolRecommendation = () => {
             <p className="text-sm font-medium text-slate-700 dark:text-white">Assigned Area</p>
             <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">{assignedAreaLabel}</p>
             <p className="mt-2 text-sm text-slate-500 dark:text-slate-300">
-              Recommendations for police users are locked to registration details so officers see patrol guidance for their own operational area.
+              Recommendations for police users are locked to their assigned patrol area first, then fall back to their registered area only when no assignment exists.
             </p>
           </div>
 
@@ -453,7 +536,7 @@ const PatrolRecommendation = () => {
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-gray-700 dark:bg-slate-900/40">
             <p className="text-sm font-medium text-slate-700 dark:text-white">Recommendation Logic</p>
             <p className="mt-2 text-sm text-slate-500 dark:text-slate-300">
-              Scores combine forecast risk index, projected growth, and top crime concentration inside the officer's assigned city or district.
+              Scores combine forecast risk index, projected growth, and top crime concentration inside the officer's assigned city, district, or state coverage.
             </p>
           </div>
         </motion.div>
@@ -520,7 +603,9 @@ const PatrolRecommendation = () => {
 
       {loadingRecommendations ? (
         <div className="mt-6 rounded-2xl bg-white p-8 text-sm text-gray-500 shadow dark:bg-gray-800 dark:text-gray-300">
-          Building patrol recommendations from forecast data...
+          {isPoliceView && !useAdminFallback && !assignedAreaResolved
+            ? "Resolving assigned patrol area..."
+            : "Building patrol recommendations from forecast data..."}
         </div>
       ) : recommendations.length === 0 ? (
         <div className="mt-6 rounded-2xl bg-white p-8 text-sm text-gray-500 shadow dark:bg-gray-800 dark:text-gray-300">

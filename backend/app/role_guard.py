@@ -16,12 +16,11 @@ def can_access_report(user: User, report: CrimeReport) -> bool:
         return report.reporter_user_id == user.id
 
     if user.role == "police":
+        patrol_district = getattr(user, "patrol_district", None) or user.district
         if report.assigned_police_id is not None:
             return report.assigned_police_id == user.id
-        if report.assigned_district and user.district:
-            return report.assigned_district == user.district
-        if report.assigned_station and user.station:
-            return report.assigned_station == user.station
+        if report.assigned_district and patrol_district:
+            return report.assigned_district == patrol_district
         return False
 
     return False

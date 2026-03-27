@@ -52,12 +52,38 @@ class UserSummary(BaseModel):
     district: str | None
     station: str | None
     department: str | None
+    patrol_state: str | None = None
+    patrol_district: str | None = None
+    patrol_city: str | None = None
+    gps_consent: bool | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class AuthUserResponse(UserSummary):
     created_at: datetime
+    current_latitude: float | None = None
+    current_longitude: float | None = None
+    location_updated_at: datetime | None = None
+
+
+class PoliceLocationUpdateRequest(BaseModel):
+    latitude: float
+    longitude: float
+
+
+class PatrolAreaUpdateRequest(BaseModel):
+    patrol_state: str | None = None
+    patrol_district: str | None = None
+    patrol_city: str | None = None
+
+    @field_validator("patrol_state", "patrol_district", "patrol_city")
+    @classmethod
+    def normalize_patrol_fields(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
 
 
 class CrimeBase(BaseModel):

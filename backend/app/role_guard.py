@@ -20,6 +20,6 @@ def can_access_report(user: User, report: CrimeReport) -> bool:
             return report.assigned_district == user.district
         if report.assigned_station and user.station:
             return report.assigned_station == user.station
-        return True
+        return False
 
     return False

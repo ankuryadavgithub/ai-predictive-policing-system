@@ -132,13 +132,21 @@ def get_heatmap_data(
     city: str = "All",
     crime_type: str = "All",
     record_type: schemas.RecordType = "all",
+    max_points: int = 50000,
     db: Session = Depends(get_db),
 ):
+    if year < 1900 or year > 2100:
+        return []
+
+    max_points = min(max(max_points, 500), 200000)
+
     resolved_record_type = record_type
     if record_type == "all":
         resolved_record_type = "historical" if year <= 2025 else "predicted"
 
-    cache_key = f"crimes:heatmap:{year}:{state}:{city}:{crime_type}:{resolved_record_type}"
+    cache_key = (
+        f"crimes:heatmap:{year}:{state}:{city}:{crime_type}:{resolved_record_type}:{max_points}"
+    )
     cached = get_cache(cache_key)
     if cached is not None:
         return cached
@@ -148,7 +156,11 @@ def get_heatmap_data(
         models.Crime.longitude,
         func.sum(models.Crime.crime_count).label("intensity"),
         models.Crime.record_type,
-    ).filter(models.Crime.year == year)
+    ).filter(
+        models.Crime.year == year,
+        models.Crime.latitude.isnot(None),
+        models.Crime.longitude.isnot(None),
+    )
     query = _apply_record_type(query, year, resolved_record_type)
 
     if state != "All":
@@ -158,11 +170,17 @@ def get_heatmap_data(
     if crime_type != "All":
         query = query.filter(models.Crime.crime_type == crime_type)
 
-    crimes = query.group_by(
-        models.Crime.latitude,
-        models.Crime.longitude,
-        models.Crime.record_type,
-    ).all()
+    crimes = (
+        query.group_by(
+            models.Crime.latitude,
+            models.Crime.longitude,
+            models.Crime.record_type,
+        )
+        .having(func.sum(models.Crime.crime_count) > 0)
+        .order_by(func.sum(models.Crime.crime_count).desc())
+        .limit(max_points)
+        .all()
+    )
 
     data = [
         {

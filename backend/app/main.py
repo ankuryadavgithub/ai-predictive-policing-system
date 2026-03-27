@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.audit import logger
 from app.admin_routes import router as admin_router
 from app.auth_routes import router as auth_router
 from app.config import settings
@@ -24,6 +25,18 @@ app.include_router(crime_router)
 app.include_router(forecast_router)
 app.include_router(reports_router)
 app.include_router(admin_router)
+
+
+@app.on_event("startup")
+def _validate_runtime_security():
+    if settings.environment.lower() == "production":
+        if settings.secret_key == "change-me-in-production":
+            raise RuntimeError("SECRET_KEY must be set in production")
+        if "change-me@" in settings.database_url:
+            raise RuntimeError("DATABASE_URL must be set in production")
+
+    if settings.allow_admin_registration:
+        logger.warning("ALLOW_ADMIN_REGISTRATION is enabled")
 
 
 @app.get("/")

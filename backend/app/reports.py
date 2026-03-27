@@ -77,14 +77,24 @@ def _save_upload(file: UploadFile, report_id: str) -> tuple[Path, int, str]:
     report_dir.mkdir(parents=True, exist_ok=True)
 
     destination = report_dir / safe_name
-    content = file.file.read()
-    if len(content) > settings.max_upload_size_bytes:
-        raise HTTPException(status_code=400, detail="Uploaded file exceeds size limit")
+    total_size = 0
+    chunk_size = 1024 * 1024
+    try:
+        with destination.open("wb") as buffer:
+            while True:
+                chunk = file.file.read(chunk_size)
+                if not chunk:
+                    break
+                total_size += len(chunk)
+                if total_size > settings.max_upload_size_bytes:
+                    buffer.close()
+                    destination.unlink(missing_ok=True)
+                    raise HTTPException(status_code=400, detail="Uploaded file exceeds size limit")
+                buffer.write(chunk)
+    finally:
+        file.file.close()
 
-    with destination.open("wb") as buffer:
-        buffer.write(content)
-
-    return destination, len(content), ALLOWED_CONTENT_TYPES[content_type]
+    return destination, total_size, ALLOWED_CONTENT_TYPES[content_type]
 
 
 @router.post("/")
@@ -105,6 +115,13 @@ def create_report(
         settings.report_rate_limit,
         settings.rate_limit_window_seconds,
     )
+
+    if not crime_type.strip():
+        raise HTTPException(status_code=400, detail="Crime type is required")
+    if not severity.strip():
+        raise HTTPException(status_code=400, detail="Severity is required")
+    if len(description.strip()) < 20:
+        raise HTTPException(status_code=400, detail="Description must be at least 20 characters")
 
     if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
         raise HTTPException(status_code=400, detail="Invalid latitude or longitude")
@@ -166,11 +183,13 @@ def get_reports(
     query = db.query(CrimeReport)
     if user.role == "citizen":
         query = query.filter(CrimeReport.reporter_user_id == user.id)
-    elif user.role == "police" and user.district:
-        query = query.filter(
-            (CrimeReport.assigned_district == user.district)
-            | (CrimeReport.assigned_district.is_(None))
-        )
+    elif user.role == "police":
+        if user.district:
+            query = query.filter(CrimeReport.assigned_district == user.district)
+        elif user.station:
+            query = query.filter(CrimeReport.assigned_station == user.station)
+        else:
+            raise HTTPException(status_code=403, detail="Police account missing station or district assignment")
     else:
         require_role(user, ["police", "admin"])
 

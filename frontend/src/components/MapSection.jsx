@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import DeckGL from "@deck.gl/react";
 import { HexagonLayer } from "@deck.gl/aggregation-layers";
-import { Map } from "react-map-gl/maplibre";
+import { Map as MapLibreMap } from "react-map-gl/maplibre";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -105,12 +105,15 @@ const defaultViewState = {
   bearing: 0,
 };
 
+const heatmapResponseCache = new Map();
+
 const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[400px]" }) => {
   const [sampleData, setSampleData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [hoverInfo, setHoverInfo] = useState(null);
   const [internalViewState, setInternalViewState] = useState(defaultViewState);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const year = filters.year ?? 2024;
   const state = filters.state ?? "All";
@@ -123,11 +126,25 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[4
       : dataset === "predicted"
       ? "predicted"
       : "all";
+
+  const maxPoints = 50000;
+  const fetchKey = `${year}|${state}|${city}|${crimeType}|${recordType}|${maxPoints}`;
+
   const activeViewState = viewState || internalViewState;
   const updateViewState = setViewState || setInternalViewState;
 
   useEffect(() => {
+    const controller = new AbortController();
+
     const fetchHeatmap = async () => {
+      const cached = heatmapResponseCache.get(fetchKey);
+      if (cached) {
+        setSampleData(cached);
+        setLoading(false);
+        setError("");
+        return;
+      }
+
       try {
         setLoading(true);
         setError("");
@@ -139,7 +156,9 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[4
             city,
             crime_type: crimeType,
             record_type: recordType,
-          }
+            max_points: maxPoints,
+          },
+          signal: controller.signal,
         });
 
         const points = res.data.map((item) => ({
@@ -149,8 +168,13 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[4
           recordType: item.record_type,
         }));
 
+        heatmapResponseCache.set(fetchKey, points);
         setSampleData(points);
       } catch (err) {
+        if (err?.name === "CanceledError" || err?.code === "ERR_CANCELED") {
+          return;
+        }
+
         console.error("Heatmap fetch error:", err);
         setError(err?.response?.data?.detail || "Unable to load heatmap data");
         setSampleData([]);
@@ -160,7 +184,8 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[4
     };
 
     fetchHeatmap();
-  }, [year, state, city, crimeType, recordType]);
+    return () => controller.abort();
+  }, [year, state, city, crimeType, recordType, maxPoints, fetchKey, reloadKey]);
 
   useEffect(() => {
     if (city !== "All" && cityCenters[city]) {
@@ -238,8 +263,8 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[4
     <div className={`relative ${heightClass} w-full rounded-xl overflow-hidden`}>
       <div className="absolute top-3 left-3 z-20 bg-white/90 dark:bg-gray-900/90 rounded-lg shadow px-3 py-2 text-xs text-gray-700 dark:text-gray-200">
         <p className="font-semibold">{prettyDataset[dataset] || "Historical"} Heatmap</p>
-        <p>{year} • {state === "All" ? "India" : state}{city !== "All" ? ` • ${city}` : ""}</p>
-        <p>{summary.points} hotspots • max intensity {summary.maxIntensity}</p>
+        <p>{year} | {state === "All" ? "India" : state}{city !== "All" ? ` | ${city}` : ""}</p>
+        <p>{summary.points} hotspots | max intensity {summary.maxIntensity}</p>
       </div>
 
       <div className="absolute top-3 right-3 z-20 flex gap-2">
@@ -249,6 +274,17 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[4
         >
           Reset View
         </button>
+        {!loading && (
+          <button
+            onClick={() => {
+              heatmapResponseCache.delete(fetchKey);
+              setReloadKey((prev) => prev + 1);
+            }}
+            className="px-3 py-2 rounded bg-white/90 dark:bg-gray-900/90 text-xs text-gray-700 dark:text-gray-200 shadow"
+          >
+            Refresh Data
+          </button>
+        )}
       </div>
 
       <div className="absolute bottom-3 left-3 z-20 bg-white/90 dark:bg-gray-900/90 rounded-lg shadow px-3 py-2 text-xs text-gray-700 dark:text-gray-200">
@@ -268,8 +304,14 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[4
       )}
 
       {!loading && error && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 dark:bg-gray-900/70 text-sm text-red-600 dark:text-red-300">
-          {error}
+        <div className="absolute inset-0 z-10 flex flex-col gap-3 items-center justify-center bg-white/70 dark:bg-gray-900/70 text-sm text-red-600 dark:text-red-300 px-4 text-center">
+          <p>{error}</p>
+          <button
+            onClick={() => setReloadKey((prev) => prev + 1)}
+            className="px-3 py-2 rounded bg-red-600 text-white text-xs shadow hover:bg-red-700"
+          >
+            Retry
+          </button>
         </div>
       )}
 
@@ -298,7 +340,7 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[4
         layers={[layer]}
         style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
       >
-        <Map
+        <MapLibreMap
           reuseMaps
           mapLib={maplibregl}
           mapStyle="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"

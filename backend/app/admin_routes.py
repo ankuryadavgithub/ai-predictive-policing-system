@@ -91,6 +91,8 @@ def delete_user(
     target = db.query(User).filter(User.id == id).first()
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
+    if target.id == user.id:
+        raise HTTPException(status_code=400, detail="You cannot delete your own account")
     if target.role == "admin":
         raise HTTPException(status_code=400, detail="Admin users cannot be deleted from this endpoint")
 
@@ -127,6 +129,8 @@ def suspend_user(
     target = db.query(User).filter(User.id == id).first()
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
+    if target.id == user.id:
+        raise HTTPException(status_code=400, detail="You cannot suspend your own account")
 
     target.status = "suspended"
     db.commit()

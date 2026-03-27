@@ -19,7 +19,7 @@ class Settings:
 
     database_url = os.getenv(
         "DATABASE_URL",
-        "postgresql://postgres:postgres123123@localhost:5432/crime_db",
+        "postgresql://postgres:change-me@localhost:5432/crime_db",
     )
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
     mongo_url = os.getenv("MONGO_URL", "mongodb://localhost:27017")
@@ -31,7 +31,12 @@ class Settings:
 
     access_cookie_name = os.getenv("ACCESS_COOKIE_NAME", "pps_access_token")
     cookie_secure = _as_bool(os.getenv("COOKIE_SECURE"), default=False)
-    cookie_samesite = os.getenv("COOKIE_SAMESITE", "lax")
+    _cookie_samesite_raw = (os.getenv("COOKIE_SAMESITE", "lax") or "lax").strip().lower()
+    cookie_samesite = (
+        _cookie_samesite_raw
+        if _cookie_samesite_raw in {"lax", "strict", "none"}
+        else "lax"
+    )
 
     allowed_origins = [
         origin.strip()

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import MainLayout from "../layout/MainLayout";
 import FilterPanel from "../components/FilterPanel";
 import MapSection from "../components/MapSection";
@@ -26,6 +26,15 @@ const Heatmap = () => {
   const [historicalViewState, setHistoricalViewState] = useState({ ...baseView });
   const [predictedViewState, setPredictedViewState] = useState({ ...baseView });
 
+  useEffect(() => {
+    if (!splitView) {
+      return;
+    }
+
+    setHistoricalViewState({ ...viewState });
+    setPredictedViewState({ ...viewState });
+  }, [splitView, viewState]);
+
   const compareSummary = useMemo(() => {
     return {
       geography: filters.city !== "All" ? filters.city : filters.state !== "All" ? filters.state : "India",
@@ -33,6 +42,11 @@ const Heatmap = () => {
       year: filters.year,
     };
   }, [filters]);
+
+  const syncCompareViewState = (nextViewState) => {
+    setHistoricalViewState(nextViewState);
+    setPredictedViewState(nextViewState);
+  };
 
   return (
     <MainLayout>
@@ -84,7 +98,7 @@ const Heatmap = () => {
               <MapSection
                 filters={{ ...filters, dataset: "Historical", year: Math.min(filters.year, 2025) }}
                 viewState={historicalViewState}
-                setViewState={setHistoricalViewState}
+                setViewState={syncCompareViewState}
                 heightClass="h-[650px]"
               />
             </div>
@@ -94,7 +108,7 @@ const Heatmap = () => {
               <MapSection
                 filters={{ ...filters, dataset: "Predicted", year: Math.max(filters.year, 2026) }}
                 viewState={predictedViewState}
-                setViewState={setPredictedViewState}
+                setViewState={syncCompareViewState}
                 heightClass="h-[650px]"
               />
             </div>

@@ -114,6 +114,8 @@ class ForecastResponse(BaseModel):
     predicted_crimes: dict[str, int]
     crime_risk_index: float
     record_type: str = "predicted"
+    source: str | None = None
+    prediction_batch: str | None = None
 
 
 class ReportUpdateRequest(BaseModel):

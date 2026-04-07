@@ -1,0 +1,38 @@
+{
+  "model_name": "persistence_baseline",
+  "forecast_method": "repeat_last_available_year",
+  "trained_on_years": [
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "source_year": 2025,
+  "forecast_year_start": 2026,
+  "forecast_year_end": 2030,
+  "crime_columns": [
+    "Arms_Act_Offences",
+    "Assault",
+    "Attempt_to_Murder",
+    "Auto_Theft",
+    "Burglary",
+    "Cheating_Fraud",
+    "Cyber_Crime",
+    "Dacoity",
+    "Domestic_Violence",
+    "Dowry_Deaths",
+    "Drug_Offences",
+    "Kidnapping_Abduction",
+    "Murder",
+    "Rape",
+    "Riots",
+    "Robbery",
+    "Theft",
+    "Total_Estimated_Crimes"
+  ],
+  "generated_at": "2026-04-07T17:56:15.469962+00:00",
+  "forecast_batch_id": "baseline_prod_20260407_175615",
+  "city_count": 6674
+}

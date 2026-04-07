@@ -32,13 +32,13 @@ const AdminPanel = () => {
   const [districtOptions, setDistrictOptions] = useState([]);
   const [cityOptions, setCityOptions] = useState([]);
 
-  const loadPage = async () => {
+  const loadPage = async (searchQuery = "") => {
     try {
       setLoading(true);
       setError("");
 
       const [usersRes, statsRes, statesRes] = await Promise.all([
-        api.get("/admin/users", { params: { page_size: 100 } }),
+        api.get("/admin/users", { params: { page_size: 1000, query: searchQuery || undefined } }),
         api.get("/admin/analytics"),
         api.get("/admin/patrol/states"),
       ]);
@@ -57,6 +57,14 @@ const AdminPanel = () => {
   useEffect(() => {
     loadPage();
   }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      loadPage(query);
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [query]);
 
   useEffect(() => {
     if (!editingOfficerId) {

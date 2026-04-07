@@ -118,15 +118,25 @@ def _serialize_evidence(file: EvidenceFile) -> dict:
 def get_all_users(
     page: int = 1,
     page_size: int = 25,
+    query: str | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     require_role(user, ["admin"])
     page = max(page, 1)
-    page_size = min(max(page_size, 1), 100)
+    page_size = min(max(page_size, 1), 1000)
+
+    users_query = db.query(User)
+    if query:
+        search = f"%{query.strip()}%"
+        users_query = users_query.filter(
+            (User.username.ilike(search))
+            | (User.email.ilike(search))
+            | (User.full_name.ilike(search))
+        )
 
     users = (
-        db.query(User)
+        users_query
         .order_by(User.created_at.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)

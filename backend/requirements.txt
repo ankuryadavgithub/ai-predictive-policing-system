@@ -12,3 +12,9 @@ pymongo
 alembic
 pytest
 httpx
+# Optional ML pipeline dependencies for train-once / generate-many forecasting.
+numpy
+pandas
+scikit-learn
+torch
+torch-geometric

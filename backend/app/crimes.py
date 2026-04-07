@@ -7,21 +7,19 @@ from app.config import settings
 from app.dependencies import get_current_user, get_db
 from app import models, schemas
 from app.models import User
+from app.prediction_source import (
+    apply_record_scope_filter,
+    resolve_effective_record_type,
+    resolve_prediction_source,
+)
 from app.role_guard import require_role
 
 
 router = APIRouter(prefix="/crimes", tags=["Crimes"])
 
 
-def _apply_record_type(query, year: int | None, record_type: str):
-    if record_type == "historical":
-        query = query.filter(models.Crime.record_type == "historical")
-    elif record_type == "predicted":
-        query = query.filter(models.Crime.record_type == "predicted")
-    elif year is not None:
-        inferred = "historical" if year <= 2025 else "predicted"
-        query = query.filter(models.Crime.record_type == inferred)
-    return query
+def _apply_record_type(query, db: Session, year: int | None, record_type: str):
+    return apply_record_scope_filter(query, db, year, record_type)
 
 
 @router.post("/", response_model=schemas.CrimeResponse)
@@ -44,7 +42,7 @@ def get_all_crimes(
     db: Session = Depends(get_db),
 ):
     query = db.query(models.Crime)
-    query = _apply_record_type(query, None, record_type)
+    query = _apply_record_type(query, db, None, record_type)
     return query.limit(1000).all()
 
 
@@ -55,7 +53,7 @@ def get_crimes_by_year(
     db: Session = Depends(get_db),
 ):
     query = db.query(models.Crime).filter(models.Crime.year == year)
-    query = _apply_record_type(query, year, record_type)
+    query = _apply_record_type(query, db, year, record_type)
     return query.all()
 
 
@@ -67,13 +65,20 @@ def get_yearly_totals(
     record_type: schemas.RecordType = "all",
     db: Session = Depends(get_db),
 ):
-    cache_key = f"crimes:yearly:{state}:{city}:{crime_type}:{record_type}"
+    resolved_record_type = resolve_effective_record_type(None, record_type)
+    prediction_scope = None
+    if resolved_record_type in {"all", "predicted"}:
+        prediction_scope = resolve_prediction_source(db)
+    cache_key = (
+        f"crimes:yearly:{state}:{city}:{crime_type}:{record_type}:"
+        f"{prediction_scope.prediction_batch if prediction_scope else 'none'}"
+    )
     cached = get_cache(cache_key)
     if cached is not None:
         return cached
 
     query = db.query(models.Crime)
-    query = _apply_record_type(query, None, record_type)
+    query = _apply_record_type(query, db, None, record_type)
 
     if state != "All":
         query = query.filter(models.Crime.state == state)
@@ -106,7 +111,14 @@ def get_city_trend(
     record_type: schemas.RecordType = "all",
     db: Session = Depends(get_db),
 ):
-    cache_key = f"crimes:city:{city.lower()}:{record_type}"
+    resolved_record_type = resolve_effective_record_type(None, record_type)
+    prediction_scope = None
+    if resolved_record_type in {"all", "predicted"}:
+        prediction_scope = resolve_prediction_source(db)
+    cache_key = (
+        f"crimes:city:{city.lower()}:{record_type}:"
+        f"{prediction_scope.prediction_batch if prediction_scope else 'none'}"
+    )
     cached = get_cache(cache_key)
     if cached is not None:
         return cached
@@ -115,7 +127,7 @@ def get_city_trend(
         models.Crime.year,
         func.sum(models.Crime.crime_count).label("total"),
     ).filter(models.Crime.city.ilike(f"%{city}%"))
-    query = _apply_record_type(query, None, record_type)
+    query = _apply_record_type(query, db, None, record_type)
 
     results = query.group_by(models.Crime.year).order_by(models.Crime.year).all()
     data = [{"year": row.year, "total": row.total} for row in results]
@@ -129,13 +141,20 @@ def get_cities(
     record_type: schemas.RecordType = "all",
     db: Session = Depends(get_db),
 ):
-    cache_key = f"crimes:cities:{state}:{record_type}"
+    resolved_record_type = resolve_effective_record_type(None, record_type)
+    prediction_scope = None
+    if resolved_record_type in {"all", "predicted"}:
+        prediction_scope = resolve_prediction_source(db)
+    cache_key = (
+        f"crimes:cities:{state}:{record_type}:"
+        f"{prediction_scope.prediction_batch if prediction_scope else 'none'}"
+    )
     cached = get_cache(cache_key)
     if cached is not None:
         return cached
 
     query = db.query(models.Crime.city)
-    query = _apply_record_type(query, None, record_type)
+    query = _apply_record_type(query, db, None, record_type)
 
     if state != "All":
         query = query.filter(models.Crime.state == state)
@@ -163,10 +182,15 @@ def get_heatmap_data(
 
     resolved_record_type = record_type
     if record_type == "all":
-        resolved_record_type = "historical" if year <= 2025 else "predicted"
+        resolved_record_type = resolve_effective_record_type(year, record_type)
+
+    prediction_scope = None
+    if resolved_record_type in {"all", "predicted"}:
+        prediction_scope = resolve_prediction_source(db)
 
     cache_key = (
         f"crimes:heatmap:{year}:{state}:{city}:{crime_type}:{resolved_record_type}:{max_points}"
+        f":{prediction_scope.prediction_batch if prediction_scope else 'none'}"
     )
     cached = get_cache(cache_key)
     if cached is not None:
@@ -182,7 +206,7 @@ def get_heatmap_data(
         models.Crime.latitude.isnot(None),
         models.Crime.longitude.isnot(None),
     )
-    query = _apply_record_type(query, year, resolved_record_type)
+    query = _apply_record_type(query, db, year, resolved_record_type)
 
     if state != "All":
         query = query.filter(models.Crime.state == state)

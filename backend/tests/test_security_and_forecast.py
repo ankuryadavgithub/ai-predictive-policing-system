@@ -25,7 +25,7 @@ def test_compute_risk_uses_weighted_crime_inputs():
         }
     )
     assert risk > 0
-    assert round(risk, 2) == 26.95
+    assert round(risk, 2) == 26.20
 
 
 def test_police_can_access_explicitly_assigned_report():

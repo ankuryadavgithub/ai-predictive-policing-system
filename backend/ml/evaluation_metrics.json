@@ -1,0 +1,142 @@
+{
+  "train": {
+    "rmse": 801.8017211256159,
+    "mae": 33.311466217041016,
+    "mse": 642886.0,
+    "r2": 0.0006627440452575684,
+    "mape": 168.0149793624878,
+    "sample_count": 4337,
+    "feature_count": 18,
+    "risk_band_labels": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "risk_band_thresholds": {
+      "low_max": 73.0,
+      "medium_max": 161.76000000000022
+    },
+    "confusion_matrix": [
+      [
+        0,
+        1442,
+        0
+      ],
+      [
+        0,
+        1420,
+        0
+      ],
+      [
+        0,
+        1475,
+        0
+      ]
+    ]
+  },
+  "validation": {
+    "rmse": 241.69160521468262,
+    "mae": 22.836627960205078,
+    "mse": 58414.83203125,
+    "r2": 0.009646177291870117,
+    "mape": 162.59520053863525,
+    "sample_count": 1002,
+    "feature_count": 18,
+    "risk_band_labels": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "risk_band_thresholds": {
+      "low_max": 76.0,
+      "medium_max": 172.0
+    },
+    "confusion_matrix": [
+      [
+        0,
+        333,
+        0
+      ],
+      [
+        0,
+        329,
+        0
+      ],
+      [
+        0,
+        340,
+        0
+      ]
+    ]
+  },
+  "test": {
+    "rmse": 324.80895827393675,
+    "mae": 27.93790626525879,
+    "mse": 105500.859375,
+    "r2": 0.005357146263122559,
+    "mape": 166.08692407608032,
+    "sample_count": 1335,
+    "feature_count": 18,
+    "risk_band_labels": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "risk_band_thresholds": {
+      "low_max": 75.0,
+      "medium_max": 168.0
+    },
+    "confusion_matrix": [
+      [
+        0,
+        451,
+        0
+      ],
+      [
+        0,
+        432,
+        0
+      ],
+      [
+        0,
+        452,
+        0
+      ]
+    ]
+  },
+  "baseline_test": {
+    "rmse": 36.1219333284199,
+    "mae": 2.2171452045440674,
+    "mse": 1304.7940673828125,
+    "r2": 0.9876986145973206,
+    "mape": 2.5398245081305504,
+    "sample_count": 1335,
+    "feature_count": 18,
+    "risk_band_labels": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "risk_band_thresholds": {
+      "low_max": 75.0,
+      "medium_max": 168.0
+    },
+    "confusion_matrix": [
+      [
+        448,
+        3,
+        0
+      ],
+      [
+        25,
+        405,
+        2
+      ],
+      [
+        0,
+        18,
+        434
+      ]
+    ]
+  }
+}

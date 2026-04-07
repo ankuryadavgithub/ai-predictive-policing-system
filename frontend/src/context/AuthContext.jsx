@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+﻿import { createContext, useContext, useEffect, useState } from "react";
 import api from "../services/api";
 
 const AuthContext = createContext(null);
@@ -70,6 +70,11 @@ export const AuthProvider = ({ children }) => {
     if (res.data?.access_token) {
       sessionStorage.setItem("pps_access_token", res.data.access_token);
     }
+    if (res.data?.user) {
+      setUser(res.data.user);
+      setLoading(false);
+      return res.data.user;
+    }
     return refreshUser();
   };
 
@@ -100,3 +105,4 @@ export const AuthProvider = ({ children }) => {
 };
 
 export const useAuth = () => useContext(AuthContext);
+

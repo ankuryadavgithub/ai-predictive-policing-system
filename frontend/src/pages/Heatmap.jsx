@@ -88,7 +88,7 @@ const Heatmap = () => {
               filters={filters}
               viewState={viewState}
               setViewState={setViewState}
-              heightClass="h-[650px]"
+              heightClass="h-[420px] sm:h-[520px] lg:h-[650px]"
             />
           </div>
         ) : (
@@ -99,7 +99,7 @@ const Heatmap = () => {
                 filters={{ ...filters, dataset: "Historical", year: Math.min(filters.year, 2025) }}
                 viewState={historicalViewState}
                 setViewState={syncCompareViewState}
-                heightClass="h-[650px]"
+                heightClass="h-[420px] sm:h-[520px] lg:h-[650px]"
               />
             </div>
 
@@ -109,7 +109,7 @@ const Heatmap = () => {
                 filters={{ ...filters, dataset: "Predicted", year: Math.max(filters.year, 2026) }}
                 viewState={predictedViewState}
                 setViewState={syncCompareViewState}
-                heightClass="h-[650px]"
+                heightClass="h-[420px] sm:h-[520px] lg:h-[650px]"
               />
             </div>
           </div>

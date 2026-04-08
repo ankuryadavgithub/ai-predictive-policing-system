@@ -127,7 +127,7 @@ const PolicePanel = () => {
         Police Verification Panel
       </motion.h2>
 
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-5 mb-6 grid grid-cols-1 md:grid-cols-4 gap-3">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-4 sm:p-5 mb-6 grid grid-cols-1 xl:grid-cols-4 gap-3">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -156,7 +156,7 @@ const PolicePanel = () => {
           <option value="Medium">Medium</option>
           <option value="Low">Low</option>
         </select>
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}
@@ -193,7 +193,8 @@ const PolicePanel = () => {
             No reports match the current queue filters.
           </div>
         ) : (
-          <table className="w-full text-left">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] text-left">
             <thead className="bg-gray-100 dark:bg-gray-700">
               <tr className="text-slate-800 dark:text-white">
                 <th className="p-3">Report</th>
@@ -251,6 +252,7 @@ const PolicePanel = () => {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </motion.div>
 
@@ -270,7 +272,7 @@ const PolicePanel = () => {
               animate={{ x: 0 }}
               exit={{ x: 500 }}
               transition={{ type: "spring", stiffness: 200 }}
-              className="fixed right-0 top-0 w-full max-w-lg bg-white dark:bg-gray-900 h-full shadow-xl p-6 overflow-y-auto z-50"
+              className="fixed right-0 top-0 w-full max-w-lg bg-white dark:bg-gray-900 h-full shadow-xl p-4 sm:p-6 overflow-y-auto z-50"
             >
               <h3 className="text-xl font-semibold mb-4 text-gray-800 dark:text-white">
                 Report Details
@@ -299,7 +301,7 @@ const PolicePanel = () => {
               {selectedReport.evidence?.length > 0 && (
                 <div className="mt-6">
                   <h4 className="font-semibold mb-3 text-gray-800 dark:text-white">Evidence</h4>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {selectedReport.evidence.map((file) => (
                       <motion.div
                         key={file.id}
@@ -361,7 +363,7 @@ const PolicePanel = () => {
               </div>
 
               {(selectedReport.status === "Submitted" || selectedReport.status === "Pending" || selectedReport.status === "Assigned") && (
-                <div className="mt-6 flex gap-3">
+                <div className="mt-6 flex flex-col sm:flex-row gap-3">
                   <button
                     disabled={busyId === selectedReport.id}
                     onClick={() => submitDecision(selectedReport, "verify")}

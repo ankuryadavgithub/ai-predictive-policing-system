@@ -111,7 +111,7 @@ useEffect(() => {
       className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow mb-6"
     >
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
 
         <div>
           <label className="text-sm text-gray-500 dark:text-white">State</label>
@@ -236,7 +236,7 @@ useEffect(() => {
           </select>
         </div>
 
-        <div className="flex items-end">
+        <div className="flex items-end md:col-span-2 xl:col-span-1">
           <button
             onClick={resetFilters}
             className="w-full bg-gray-200 hover:bg-gray-300 p-2 rounded transition"

@@ -107,7 +107,7 @@ const defaultViewState = {
 
 const heatmapResponseCache = new Map();
 
-const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[400px]" }) => {
+const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[360px] sm:h-[420px]" }) => {
   const [sampleData, setSampleData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -261,13 +261,13 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[4
 
   return (
     <div className={`relative ${heightClass} w-full rounded-xl overflow-hidden`}>
-      <div className="absolute top-3 left-3 z-20 bg-white/90 dark:bg-gray-900/90 rounded-lg shadow px-3 py-2 text-xs text-gray-700 dark:text-gray-200">
+      <div className="absolute top-3 left-3 z-20 max-w-[calc(100%-1.5rem)] bg-white/90 dark:bg-gray-900/90 rounded-lg shadow px-3 py-2 text-[11px] sm:text-xs text-gray-700 dark:text-gray-200">
         <p className="font-semibold">{prettyDataset[dataset] || "Historical"} Heatmap</p>
         <p>{year} | {state === "All" ? "India" : state}{city !== "All" ? ` | ${city}` : ""}</p>
         <p>{summary.points} hotspots | max intensity {summary.maxIntensity}</p>
       </div>
 
-      <div className="absolute top-3 right-3 z-20 flex gap-2">
+      <div className="absolute top-3 right-3 z-20 flex flex-col sm:flex-row gap-2">
         <button
           onClick={resetView}
           className="px-3 py-2 rounded bg-white/90 dark:bg-gray-900/90 text-xs text-gray-700 dark:text-gray-200 shadow"
@@ -287,7 +287,7 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[4
         )}
       </div>
 
-      <div className="absolute bottom-3 left-3 z-20 bg-white/90 dark:bg-gray-900/90 rounded-lg shadow px-3 py-2 text-xs text-gray-700 dark:text-gray-200">
+      <div className="absolute bottom-3 left-3 z-20 max-w-[calc(100%-1.5rem)] bg-white/90 dark:bg-gray-900/90 rounded-lg shadow px-3 py-2 text-[11px] sm:text-xs text-gray-700 dark:text-gray-200">
         <p className="font-semibold mb-1">Intensity</p>
         <div className="flex items-center gap-2">
           <div

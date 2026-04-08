@@ -67,6 +67,39 @@ class AuthUserResponse(UserSummary):
     location_updated_at: datetime | None = None
 
 
+class CitizenVerificationResponse(BaseModel):
+    status: Literal["approved", "pending_manual_review", "rejected"]
+    message: str
+    verification_id: int | None = None
+    user_id: int | None = None
+
+
+class IdentityVerificationSummary(BaseModel):
+    id: int
+    user_id: int | None
+    full_name: str
+    username: str
+    email: EmailStr
+    phone: str | None
+    city: str | None
+    aadhaar_masked: str | None
+    verification_status: str
+    ocr_status: str
+    liveness_status: str
+    face_match_status: str
+    face_match_score: float | None
+    rejection_reason: str | None
+    raw_file_expires_at: datetime
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class IdentityVerificationDecisionRequest(BaseModel):
+    reason: str | None = None
+
+
 class PoliceLocationUpdateRequest(BaseModel):
     latitude: float
     longitude: float

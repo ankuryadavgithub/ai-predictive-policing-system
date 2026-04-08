@@ -122,7 +122,7 @@ const AdminReports = () => {
       </motion.h1>
 
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow overflow-hidden">
-        <div className="p-5 border-b border-gray-200 dark:border-gray-700 grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className="p-4 sm:p-5 border-b border-gray-200 dark:border-gray-700 grid grid-cols-1 xl:grid-cols-4 gap-3">
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -171,7 +171,7 @@ const AdminReports = () => {
           <div className="p-8 text-sm text-gray-500 dark:text-gray-300">No reports match the current filters.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left">
+            <table className="w-full min-w-[760px] text-left">
               <thead className="bg-gray-100 dark:bg-gray-700">
                 <tr>
                   <th className="p-4">Report</th>
@@ -293,7 +293,7 @@ const AdminReports = () => {
               initial={{ x: 500 }}
               animate={{ x: 0 }}
               exit={{ x: 500 }}
-              className="fixed right-0 top-0 w-full max-w-lg h-full bg-white dark:bg-gray-900 shadow-xl p-6 overflow-y-auto z-50"
+              className="fixed right-0 top-0 w-full max-w-lg h-full bg-white dark:bg-gray-900 shadow-xl p-4 sm:p-6 overflow-y-auto z-50"
             >
               <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-4">
                 Moderation Detail
@@ -315,7 +315,7 @@ const AdminReports = () => {
                 {selectedReport.evidence?.length > 0 && (
                   <div>
                     <p className="font-semibold text-gray-800 dark:text-white mb-2">Evidence</p>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {selectedReport.evidence.map((file) => (
                         <div key={file.id} className="border rounded-lg p-2">
                           <ProtectedMedia

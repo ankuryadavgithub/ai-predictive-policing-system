@@ -4,6 +4,7 @@
 
 html {
   background: #f1f5f9;
+  overflow-x: hidden;
 }
 
 html.dark {
@@ -16,6 +17,7 @@ body {
   min-height: 100vh;
   background: transparent;
   color: #0f172a;
+  overflow-x: hidden;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -27,6 +29,19 @@ html.dark body {
 
 #root {
   min-height: 100vh;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+img,
+video,
+canvas,
+svg {
+  max-width: 100%;
 }
 
 button,

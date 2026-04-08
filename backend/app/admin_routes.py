@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -8,9 +10,19 @@ from app.audit import logger
 from app.cache import get_cache, set_cache
 from app.config import settings
 from app.dependencies import get_current_user, get_db
-from app.models import Crime, CrimeReport, EvidenceFile, User
+from app.identity_verification import (
+    approve_identity_verification,
+    reject_identity_verification,
+    serialize_identity_verification,
+)
+from app.models import Crime, CrimeReport, EvidenceFile, IdentityVerification, User
 from app.role_guard import require_role
-from app.schemas import PatrolAreaUpdateRequest, ReportAssignmentRequest, UserSummary
+from app.schemas import (
+    IdentityVerificationDecisionRequest,
+    PatrolAreaUpdateRequest,
+    ReportAssignmentRequest,
+    UserSummary,
+)
 
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -143,6 +155,104 @@ def get_all_users(
         .all()
     )
     return [UserSummary.model_validate(item).model_dump(mode="json") for item in users]
+
+
+@router.get("/identity-verifications")
+def get_identity_verifications(
+    status: str = "pending_manual_review",
+    page: int = 1,
+    page_size: int = 25,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    require_role(user, ["admin"])
+    page = max(page, 1)
+    page_size = min(max(page_size, 1), 100)
+
+    query = db.query(IdentityVerification)
+    if status != "all":
+        query = query.filter(IdentityVerification.verification_status == status)
+
+    records = (
+        query.order_by(IdentityVerification.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return [serialize_identity_verification(record) for record in records]
+
+
+@router.get("/identity-verifications/{id}/files/{kind}")
+def get_identity_verification_file(
+    id: int,
+    kind: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    require_role(user, ["admin"])
+    record = db.query(IdentityVerification).filter(IdentityVerification.id == id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Identity verification not found")
+
+    if kind == "aadhaar":
+        path = record.aadhaar_card_path
+    elif kind == "selfie":
+        path = record.live_selfie_path
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported identity file type")
+
+    file_path = Path(path)
+    if not path or not file_path.exists():
+        raise HTTPException(status_code=404, detail="Identity verification file unavailable")
+
+    return FileResponse(file_path, filename=file_path.name)
+
+
+@router.patch("/identity-verifications/{id}/approve")
+def approve_identity_record(
+    id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    require_role(user, ["admin"])
+    record = db.query(IdentityVerification).filter(IdentityVerification.id == id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Identity verification not found")
+
+    approved_user = approve_identity_verification(db, record, reviewer_id=user.id)
+    db.commit()
+    logger.info("Admin approved identity verification id=%s actor=%s", id, user.username)
+    return {
+        "message": "Citizen verification approved",
+        "user_id": approved_user.id,
+        "verification": serialize_identity_verification(record),
+    }
+
+
+@router.patch("/identity-verifications/{id}/reject")
+def reject_identity_record(
+    id: int,
+    payload: IdentityVerificationDecisionRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    require_role(user, ["admin"])
+    record = db.query(IdentityVerification).filter(IdentityVerification.id == id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Identity verification not found")
+
+    reject_identity_verification(
+        db,
+        record,
+        reviewer_id=user.id,
+        reason=payload.reason or "Rejected by admin review",
+    )
+    db.commit()
+    logger.info("Admin rejected identity verification id=%s actor=%s", id, user.username)
+    return {
+        "message": "Citizen verification rejected",
+        "verification": serialize_identity_verification(record),
+    }
 
 
 @router.get("/officers")

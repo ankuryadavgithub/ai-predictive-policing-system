@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "react-router-dom";
 import {
@@ -12,7 +12,7 @@ import {
   UserRound,
 } from "lucide-react";
 
-import { registerUser } from "../utils/auth";
+import { registerUser, registerVerifiedCitizen } from "../utils/auth";
 import CinematicBackground from "../components/CinematicBackground";
 import CrimeGlobe from "../components/CrimeGlobe";
 import SatelliteScan from "../components/SatelliteScan";
@@ -41,9 +41,35 @@ const roles = [
 ];
 
 const roleGuidance = {
-  citizen: "Citizen registration is straightforward and becomes active immediately after successful submission.",
+  citizen: "Citizen registration now collects Aadhaar and live selfie evidence, then goes to admin review before account activation.",
   police: "Police registration collects operational details and usually requires admin approval before login access.",
   admin: "Admin registration requires a valid authorization code and should be used only for approved oversight accounts.",
+};
+
+const extractErrorMessage = (error) => {
+  const detail = error?.response?.data?.detail;
+  if (typeof detail === "string" && detail.trim()) {
+    return detail;
+  }
+  if (Array.isArray(detail) && detail.length > 0) {
+    return detail
+      .map((item) => {
+        if (typeof item === "string") {
+          return item;
+        }
+        if (item && typeof item === "object") {
+          const path = Array.isArray(item.loc) ? item.loc.slice(1).join(" -> ") : "";
+          const message = item.msg || item.message || "Validation error";
+          return path ? `${path}: ${message}` : message;
+        }
+        return "Validation error";
+      })
+      .join("; ");
+  }
+  if (typeof error?.response?.data?.message === "string" && error.response.data.message.trim()) {
+    return error.response.data.message;
+  }
+  return "Registration failed.";
 };
 
 const Register = () => {
@@ -51,6 +77,14 @@ const Register = () => {
   const [form, setForm] = useState({});
   const [status, setStatus] = useState({ type: "", message: "" });
   const [submitting, setSubmitting] = useState(false);
+  const [aadhaarFile, setAadhaarFile] = useState(null);
+  const [selfiePreview, setSelfiePreview] = useState("");
+  const [selfieBlob, setSelfieBlob] = useState(null);
+  const [livenessBlobs, setLivenessBlobs] = useState([]);
+  const [cameraReady, setCameraReady] = useState(false);
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
 
   const handleChange = (event) => {
     const { name, value, type, checked } = event.target;
@@ -73,22 +107,53 @@ const Register = () => {
       return;
     }
 
+    if (role === "citizen") {
+      if (!aadhaarFile) {
+        setStatus({ type: "error", message: "Please upload your Aadhaar card image." });
+        return;
+      }
+      if (!selfieBlob) {
+        setStatus({ type: "error", message: "Please capture a live selfie verification sequence." });
+        return;
+      }
+    }
+
     setSubmitting(true);
     setStatus({ type: "", message: "" });
 
     try {
-      const res = await registerUser(form);
+      let res;
+      if (role === "citizen") {
+        const citizenFormData = new FormData();
+        Object.entries(form).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && value !== "") {
+            citizenFormData.append(key, value);
+          }
+        });
+        citizenFormData.append("aadhaar_card", aadhaarFile);
+        citizenFormData.append("live_selfie", selfieBlob, "live-selfie.jpg");
+        livenessBlobs.forEach((blob, index) => {
+          citizenFormData.append("liveness_frames", blob, `liveness-${index + 1}.jpg`);
+        });
+        res = await registerVerifiedCitizen(citizenFormData);
+      } else {
+        res = await registerUser(form);
+      }
       setStatus({
-        type: "success",
+        type: res.status === "rejected" ? "error" : "success",
         message:
           res.status === "pending"
             ? "Registration submitted. Your police account is pending admin approval."
+            : res.status === "pending_manual_review"
+            ? "Verification submitted. Your citizen account is pending manual review."
+            : res.status === "rejected"
+            ? res.message || "Citizen verification was rejected."
             : "Registration successful. You can now sign in.",
       });
     } catch (err) {
       setStatus({
         type: "error",
-        message: err?.response?.data?.detail || "Registration failed.",
+        message: extractErrorMessage(err),
       });
     } finally {
       setSubmitting(false);
@@ -96,15 +161,98 @@ const Register = () => {
   };
 
   const selectRole = (nextRole) => {
+    stopCamera();
     setRole(nextRole);
     setForm({ role: nextRole });
     setStatus({ type: "", message: "" });
+    setAadhaarFile(null);
+    setSelfieBlob(null);
+    setSelfiePreview("");
+    setLivenessBlobs([]);
   };
 
   const resetRole = () => {
+    stopCamera();
     setRole(null);
     setForm({});
     setStatus({ type: "", message: "" });
+    setAadhaarFile(null);
+    setSelfieBlob(null);
+    setSelfiePreview("");
+    setLivenessBlobs([]);
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    setCameraReady(false);
+  };
+
+  useEffect(() => {
+    return () => stopCamera();
+  }, []);
+
+  const startCamera = async () => {
+    try {
+      stopCamera();
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+      setCameraReady(true);
+    } catch (error) {
+      console.error(error);
+      setStatus({ type: "error", message: "Camera permission is required for live selfie verification." });
+    }
+  };
+
+  const captureFrameBlob = () =>
+    new Promise((resolve) => {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      if (!video || !canvas) {
+        resolve(null);
+        return;
+      }
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      const context = canvas.getContext("2d");
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.92);
+    });
+
+  const captureVerificationSequence = async () => {
+    if (!cameraReady) {
+      await startCamera();
+      return;
+    }
+
+    const frames = [];
+    for (let index = 0; index < 3; index += 1) {
+      const blob = await captureFrameBlob();
+      if (blob) {
+        frames.push(blob);
+      }
+      if (index < 2) {
+        await new Promise((resolve) => setTimeout(resolve, 350));
+      }
+    }
+
+    if (frames.length === 0) {
+      setStatus({ type: "error", message: "Unable to capture live selfie frames from the camera." });
+      return;
+    }
+
+    setSelfieBlob(frames[0]);
+    setLivenessBlobs(frames);
+    setSelfiePreview(URL.createObjectURL(frames[0]));
+    setStatus({
+      type: "success",
+      message: "Live selfie verification frames captured. You can now submit your citizen registration.",
+    });
   };
 
   const selectedRole = roles.find((item) => item.id === role);
@@ -240,7 +388,59 @@ const Register = () => {
                         <Field label="Phone Number" name="phone" placeholder="Enter your phone number" onChange={handleChange} required icon={<Shield size={16} />} />
                         <Field label="City" name="city" placeholder="Enter your city" onChange={handleChange} required icon={<MapPin size={16} />} />
                         <Field label="Address" name="address" placeholder="Optional address" onChange={handleChange} optional icon={<MapPin size={16} />} />
-                        <Field label="Aadhaar / Govt ID" name="aadhaar" placeholder="Optional identity reference" onChange={handleChange} optional icon={<IdCard size={16} />} />
+                        <div className="auth-field">
+                          <div className="auth-field-head">
+                            <label htmlFor="aadhaar_card">Aadhaar Card Image</label>
+                          </div>
+                          <div className="auth-input-wrap">
+                            <IdCard size={16} />
+                            <input
+                              id="aadhaar_card"
+                              name="aadhaar_card"
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp"
+                              required
+                              onChange={(event) => setAadhaarFile(event.target.files?.[0] || null)}
+                            />
+                          </div>
+                        </div>
+                      </AuthSection>
+
+                      <AuthSection title="Live Verification">
+                        <div className="auth-field">
+                          <div className="auth-field-head">
+                            <label>Live Selfie Capture</label>
+                          </div>
+                          <div className="auth-section-body">
+                            <video
+                              ref={videoRef}
+                              autoPlay
+                              muted
+                              playsInline
+                              className="w-full rounded-xl border border-white/10 bg-black/50"
+                              style={{ minHeight: "220px" }}
+                            />
+                            <canvas ref={canvasRef} className="hidden" />
+                            <div className="mt-3 flex flex-wrap gap-3">
+                              <button type="button" className="auth-button" onClick={startCamera}>
+                                {cameraReady ? "Restart Camera" : "Start Camera"}
+                              </button>
+                              <button type="button" className="auth-button" onClick={captureVerificationSequence}>
+                                Capture Live Selfie
+                              </button>
+                            </div>
+                            <p className="mt-3 text-sm text-gray-400">
+                              Keep your face centered and move slightly while capture runs so liveness can be checked.
+                            </p>
+                            {selfiePreview && (
+                              <img
+                                src={selfiePreview}
+                                alt="Live selfie preview"
+                                className="mt-4 max-h-48 rounded-xl border border-white/10 object-cover"
+                              />
+                            )}
+                          </div>
+                        </div>
                       </AuthSection>
 
                       <AuthSection title="Preferences">
@@ -310,7 +510,7 @@ const Register = () => {
                     className="auth-button"
                     disabled={submitting}
                   >
-                    {submitting ? "Creating Account..." : "Create Account"}
+                    {submitting ? "Creating Account..." : role === "citizen" ? "Submit For Review" : "Create Account"}
                   </motion.button>
 
                   <p className="auth-switch">

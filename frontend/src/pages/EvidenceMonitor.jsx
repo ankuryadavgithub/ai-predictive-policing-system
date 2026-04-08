@@ -58,7 +58,7 @@ const EvidenceMonitor = () => {
         Evidence Monitoring
       </motion.h1>
 
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-5 mb-6 grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-4 sm:p-5 mb-6 grid grid-cols-1 lg:grid-cols-3 gap-3">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -102,7 +102,7 @@ const EvidenceMonitor = () => {
             >
               <ProtectedMedia
                 file={file}
-                className="rounded mb-3 w-full h-56 object-cover"
+                className="rounded mb-3 w-full h-44 sm:h-56 object-cover"
                 alt={file.original_file_name}
               />
               <div className="space-y-1 text-sm text-gray-600 dark:text-gray-300">

@@ -60,6 +60,11 @@ class User(Base):
         foreign_keys="CrimeReport.assigned_police_id",
         overlaps="assigned_officer",
     )
+    identity_verifications = relationship(
+        "IdentityVerification",
+        back_populates="user",
+        foreign_keys="IdentityVerification.user_id",
+    )
 
 
 class Crime(Base):
@@ -91,6 +96,49 @@ class Prediction(Base):
     district = Column(String(255))
     year = Column(Integer)
     predicted_crime_count = Column(Float)
+
+
+class IdentityVerification(Base):
+    __tablename__ = "identity_verifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    role = Column(String(30), nullable=False, default="citizen", index=True)
+
+    full_name = Column(String(255), nullable=False)
+    username = Column(String(100), nullable=False, index=True)
+    email = Column(String(255), nullable=False, index=True)
+    phone = Column(String(20))
+    address = Column(Text)
+    city = Column(String(255))
+    gps_consent = Column(Boolean, default=False, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+
+    aadhaar_masked = Column(String(20), nullable=True, index=True)
+    verification_status = Column(String(40), nullable=False, default="pending_manual_review", index=True)
+    ocr_status = Column(String(40), nullable=False, default="pending")
+    liveness_status = Column(String(40), nullable=False, default="pending")
+    face_match_score = Column(Float, nullable=True)
+    face_match_status = Column(String(40), nullable=False, default="pending")
+    rejection_reason = Column(Text)
+
+    aadhaar_card_path = Column(String(500), nullable=False)
+    live_selfie_path = Column(String(500), nullable=False)
+    liveness_frames_path = Column(String(500), nullable=True)
+    raw_file_expires_at = Column(DateTime(timezone=True), nullable=False)
+    reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    user = relationship("User", back_populates="identity_verifications", foreign_keys=[user_id])
+    reviewer = relationship("User", foreign_keys=[reviewed_by])
 
 
 class CrimeReport(Base):

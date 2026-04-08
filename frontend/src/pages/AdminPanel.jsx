@@ -31,21 +31,24 @@ const AdminPanel = () => {
   const [stateOptions, setStateOptions] = useState([]);
   const [districtOptions, setDistrictOptions] = useState([]);
   const [cityOptions, setCityOptions] = useState([]);
+  const [identityVerifications, setIdentityVerifications] = useState([]);
 
   const loadPage = async (searchQuery = "") => {
     try {
       setLoading(true);
       setError("");
 
-      const [usersRes, statsRes, statesRes] = await Promise.all([
+      const [usersRes, statsRes, statesRes, identityRes] = await Promise.all([
         api.get("/admin/users", { params: { page_size: 1000, query: searchQuery || undefined } }),
         api.get("/admin/analytics"),
         api.get("/admin/patrol/states"),
+        api.get("/admin/identity-verifications", { params: { page_size: 20, status: "pending_manual_review" } }),
       ]);
 
       setUsers(usersRes.data);
       setStats(statsRes.data);
       setStateOptions(statesRes.data);
+      setIdentityVerifications(identityRes.data);
     } catch (err) {
       console.error(err);
       setError(err?.response?.data?.detail || "Failed to load admin panel");
@@ -203,6 +206,31 @@ const AdminPanel = () => {
     });
   };
 
+  const openProtectedFile = async (filePath, fallbackName) => {
+    try {
+      setError("");
+      const response = await api.get(filePath, { responseType: "blob" });
+      const blobUrl = window.URL.createObjectURL(response.data);
+      const newWindow = window.open(blobUrl, "_blank", "noopener,noreferrer");
+
+      if (!newWindow) {
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.target = "_blank";
+        link.rel = "noreferrer";
+        link.download = fallbackName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+
+      window.setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
+    } catch (err) {
+      console.error(err);
+      setError(err?.response?.data?.detail || "Failed to open identity verification file");
+    }
+  };
+
   return (
     <MainLayout>
       <motion.div
@@ -222,13 +250,111 @@ const AdminPanel = () => {
         variants={container}
         initial="hidden"
         animate="show"
-        className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8"
+        className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8"
       >
         <Card title="Total Users" value={stats.total_users} />
         <Card title="Pending Police" value={stats.pending_police} />
         <Card title="Total Reports" value={stats.total_reports} />
         <Card title="Verified Reports" value={stats.verified_reports} />
       </motion.div>
+
+      <div className="mb-8 rounded-xl border border-gray-200 bg-white/80 p-5 shadow-xl dark:border-gray-700 dark:bg-gray-900/60">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-700 dark:text-white">Citizen Identity Reviews</h2>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              Review Aadhaar OCR, live selfie matching, and manual-review citizen registrations.
+            </p>
+          </div>
+          <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+            {identityVerifications.length} pending
+          </span>
+        </div>
+
+        {identityVerifications.length === 0 ? (
+          <p className="mt-4 text-sm text-gray-500 dark:text-gray-300">No citizen verification requests are pending review.</p>
+        ) : (
+          <div className="mt-4 grid gap-4">
+            {identityVerifications.map((verification) => (
+              <div
+                key={verification.id}
+                className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"
+              >
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <p className="text-base font-semibold text-gray-800 dark:text-white">{verification.username}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{verification.full_name}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{verification.email}</p>
+                    <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">Masked Aadhaar: {verification.aadhaar_masked || "Unavailable"}</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                      OCR: {verification.ocr_status} | Liveness: {verification.liveness_status} | Face: {verification.face_match_status}
+                    </p>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                      Match Score: {verification.face_match_score ?? "N/A"}
+                    </p>
+                    {verification.rejection_reason && (
+                      <p className="mt-2 text-sm text-amber-600 dark:text-amber-300">{verification.rejection_reason}</p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <button
+                      type="button"
+                      className="rounded px-3 py-2 text-sm text-blue-600 hover:bg-blue-50"
+                      onClick={() => openProtectedFile(verification.aadhaar_card_url, `aadhaar-${verification.id}`)}
+                    >
+                      View Aadhaar
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded px-3 py-2 text-sm text-blue-600 hover:bg-blue-50"
+                      onClick={() => openProtectedFile(verification.live_selfie_url, `selfie-${verification.id}`)}
+                    >
+                      View Selfie
+                    </button>
+                    <ActionButton
+                      color="green"
+                      label={busyId === `verify-approve-${verification.id}` ? "Working..." : "Approve"}
+                      disabled={busyId === `verify-approve-${verification.id}`}
+                      onClick={async () => {
+                        try {
+                          setBusyId(`verify-approve-${verification.id}`);
+                          await api.patch(`/admin/identity-verifications/${verification.id}/approve`);
+                          await loadPage(query);
+                        } catch (err) {
+                          console.error(err);
+                          setError(err?.response?.data?.detail || "Failed to approve citizen verification");
+                        } finally {
+                          setBusyId(null);
+                        }
+                      }}
+                    />
+                    <ActionButton
+                      color="red"
+                      label={busyId === `verify-reject-${verification.id}` ? "Working..." : "Reject"}
+                      disabled={busyId === `verify-reject-${verification.id}`}
+                      onClick={async () => {
+                        try {
+                          setBusyId(`verify-reject-${verification.id}`);
+                          await api.patch(`/admin/identity-verifications/${verification.id}/reject`, {
+                            reason: "Rejected during admin identity review",
+                          });
+                          await loadPage(query);
+                        } catch (err) {
+                          console.error(err);
+                          setError(err?.response?.data?.detail || "Failed to reject citizen verification");
+                        } finally {
+                          setBusyId(null);
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="bg-white/80 dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl overflow-hidden">
         <div className="p-5 border-b border-gray-200 dark:border-gray-700 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -241,7 +367,7 @@ const AdminPanel = () => {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 w-full lg:w-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 w-full lg:w-auto">
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -287,7 +413,7 @@ const AdminPanel = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left">
+            <table className="w-full min-w-[980px] text-left">
               <thead className="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
                 <tr>
                   <th className="p-4">User</th>
@@ -316,7 +442,7 @@ const AdminPanel = () => {
                       <p>{user.district || "No district"}</p>
                       <p>{user.station || "No station"}</p>
                     </td>
-                    <td className="p-4 text-sm text-gray-500 dark:text-gray-300 min-w-80">
+                    <td className="p-4 text-sm text-gray-500 dark:text-gray-300 min-w-[20rem]">
                       {user.role !== "police" ? (
                         <span className="text-gray-400">Not applicable</span>
                       ) : editingOfficerId === user.id ? (

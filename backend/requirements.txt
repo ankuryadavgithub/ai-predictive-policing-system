@@ -12,6 +12,9 @@ pymongo
 alembic
 pytest
 httpx
+opencv-python
+Pillow
+easyocr
 # Optional ML pipeline dependencies for train-once / generate-many forecasting.
 numpy
 pandas

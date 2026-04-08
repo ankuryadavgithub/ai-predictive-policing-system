@@ -1,7 +1,7 @@
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
-const Sidebar = () => {
+const Sidebar = ({ onNavigate }) => {
   const { user } = useAuth();
   const role = user?.role;
 
@@ -71,6 +71,7 @@ const Sidebar = () => {
             <NavLink
               key={item.name}
               to={item.path}
+              onClick={onNavigate}
               className={({ isActive }) =>
                 `relative block rounded-xl px-4 py-3 transition-all duration-200 ${
                   isActive

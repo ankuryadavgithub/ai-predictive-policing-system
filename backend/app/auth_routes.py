@@ -1,14 +1,21 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.audit import logger
 from app.config import settings
 from app.dependencies import get_current_user, get_db, get_token_from_request
+from app.identity_verification import create_pending_or_approved_citizen
 from app.models import User
 from app.rate_limit import enforce_rate_limit
-from app.schemas import AuthUserResponse, LoginRequest, PoliceLocationUpdateRequest, RegisterRequest
+from app.schemas import (
+    AuthUserResponse,
+    CitizenVerificationResponse,
+    LoginRequest,
+    PoliceLocationUpdateRequest,
+    RegisterRequest,
+)
 from app.security import (
     create_access_token,
     hash_password,
@@ -20,6 +27,25 @@ from app.security import (
 
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
+
+
+def _format_error_detail(detail) -> str:
+    if isinstance(detail, str):
+        return detail
+    if isinstance(detail, list):
+        messages: list[str] = []
+        for item in detail:
+            if isinstance(item, dict):
+                loc = item.get("loc")
+                prefix = " -> ".join(str(part) for part in loc[1:]) if isinstance(loc, (list, tuple)) else ""
+                message = item.get("msg") or item.get("message") or "Validation error"
+                messages.append(f"{prefix}: {message}" if prefix else message)
+            else:
+                messages.append(str(item))
+        return "; ".join(messages)
+    if isinstance(detail, dict):
+        return detail.get("message") or detail.get("detail") or "Request failed"
+    return "Request failed"
 
 
 def _set_auth_cookie(response: Response, token: str) -> None:
@@ -47,6 +73,12 @@ def register_user(
         settings.registration_rate_limit,
         settings.rate_limit_window_seconds,
     )
+
+    if payload.role == "citizen":
+        raise HTTPException(
+            status_code=400,
+            detail="Citizen registration requires Aadhaar and live selfie verification. Use the verified registration flow.",
+        )
 
     if payload.confirm_password and payload.password != payload.confirm_password:
         raise HTTPException(status_code=400, detail="Passwords do not match")
@@ -99,6 +131,92 @@ def register_user(
     return {
         "message": "User registered successfully",
         "status": user.status,
+    }
+
+
+@router.post(
+    "/register/citizen-verified",
+    status_code=status.HTTP_201_CREATED,
+    response_model=CitizenVerificationResponse,
+)
+def register_verified_citizen(
+    request: Request,
+    full_name: str = Form(..., alias="fullName"),
+    username: str = Form(...),
+    email: str = Form(...),
+    phone: str | None = Form(default=None),
+    password: str = Form(...),
+    confirm_password: str | None = Form(default=None, alias="confirmPassword"),
+    city: str | None = Form(default=None),
+    address: str | None = Form(default=None),
+    gps_permission: bool = Form(default=False, alias="gpsPermission"),
+    aadhaar_card: UploadFile = File(...),
+    live_selfie: UploadFile = File(...),
+    liveness_frames: list[UploadFile] | None = File(default=None),
+    db: Session = Depends(get_db),
+):
+    client_ip = request.client.host if request.client else "unknown"
+    enforce_rate_limit(
+        f"register:{client_ip}:citizen_verified",
+        settings.registration_rate_limit,
+        settings.rate_limit_window_seconds,
+    )
+
+    if confirm_password and password != confirm_password:
+        raise HTTPException(status_code=400, detail="Passwords do not match")
+
+    if not validate_password_strength(password):
+        raise HTTPException(
+            status_code=400,
+            detail="Password must be at least 8 characters with uppercase, lowercase, and a number",
+        )
+
+    try:
+        verification, created_user = create_pending_or_approved_citizen(
+            db=db,
+            full_name=full_name.strip(),
+            username=username.strip(),
+            email=email.strip(),
+            phone=phone.strip() if phone else None,
+            address=address.strip() if address else None,
+            city=city.strip() if city else None,
+            password=password,
+            gps_permission=gps_permission,
+            aadhaar_card=aadhaar_card,
+            live_selfie=live_selfie,
+            liveness_frames=liveness_frames,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Citizen verification registration failed unexpectedly for username=%s", username)
+        raise HTTPException(
+            status_code=500,
+            detail="Citizen verification could not be completed. Please retry or contact admin for manual review.",
+        ) from exc
+    db.commit()
+
+    if verification.verification_status == "approved":
+        return {
+            "status": "approved",
+            "message": "Citizen registration verified successfully. You can now sign in.",
+            "verification_id": verification.id,
+            "user_id": created_user.id if created_user else None,
+        }
+
+    if verification.verification_status == "rejected":
+        return {
+            "status": "rejected",
+            "message": verification.rejection_reason or "Citizen verification was rejected.",
+            "verification_id": verification.id,
+            "user_id": None,
+        }
+
+    return {
+        "status": "pending_manual_review",
+        "message": "Citizen verification needs manual review. An admin will review your submission shortly.",
+        "verification_id": verification.id,
+        "user_id": None,
     }
 
 

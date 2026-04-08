@@ -1,9 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import Navbar from "./Navbar";
 
 const MainLayout = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const location = useLocation();
+
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
 
   return (
     <div className="flex min-h-screen bg-slate-100 text-slate-900 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100">
@@ -13,7 +19,7 @@ const MainLayout = ({ children }) => {
         transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] 
         lg:relative lg:translate-x-0`}
       >
-        <Sidebar />
+        <Sidebar onNavigate={() => setSidebarOpen(false)} />
       </div>
 
       {sidebarOpen && (
@@ -26,7 +32,7 @@ const MainLayout = ({ children }) => {
       <div className="flex flex-col flex-1 w-full min-w-0">
         <Navbar toggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
 
-        <main className="flex-1 p-4 sm:p-6 overflow-y-auto overflow-x-hidden">
+        <main className="flex-1 p-3 sm:p-6 overflow-y-auto overflow-x-hidden">
           {children}
         </main>
       </div>

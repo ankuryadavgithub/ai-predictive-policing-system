@@ -59,6 +59,19 @@ class Settings:
 
     max_evidence_files = int(os.getenv("MAX_EVIDENCE_FILES", "5"))
     max_upload_size_bytes = int(os.getenv("MAX_UPLOAD_SIZE_BYTES", str(10 * 1024 * 1024)))
+    identity_max_upload_size_bytes = int(
+        os.getenv("IDENTITY_MAX_UPLOAD_SIZE_BYTES", str(8 * 1024 * 1024))
+    )
+    identity_raw_retention_days = int(os.getenv("IDENTITY_RAW_RETENTION_DAYS", "7"))
+    identity_face_match_threshold = float(os.getenv("IDENTITY_FACE_MATCH_THRESHOLD", "0.45"))
+    identity_face_review_threshold = float(os.getenv("IDENTITY_FACE_REVIEW_THRESHOLD", "0.25"))
+    identity_liveness_threshold = float(os.getenv("IDENTITY_LIVENESS_THRESHOLD", "0.02"))
+    identity_min_image_width = int(os.getenv("IDENTITY_MIN_IMAGE_WIDTH", "480"))
+    identity_min_image_height = int(os.getenv("IDENTITY_MIN_IMAGE_HEIGHT", "320"))
+    identity_aadhaar_blur_threshold = float(os.getenv("IDENTITY_AADHAAR_BLUR_THRESHOLD", "80.0"))
+    identity_selfie_blur_threshold = float(os.getenv("IDENTITY_SELFIE_BLUR_THRESHOLD", "65.0"))
+    identity_min_brightness = float(os.getenv("IDENTITY_MIN_BRIGHTNESS", "45.0"))
+    identity_max_brightness = float(os.getenv("IDENTITY_MAX_BRIGHTNESS", "215.0"))
 
     redis_cache_ttl_seconds = int(os.getenv("REDIS_CACHE_TTL_SECONDS", "120"))
     rate_limit_window_seconds = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "300"))

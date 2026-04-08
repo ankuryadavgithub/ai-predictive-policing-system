@@ -138,7 +138,7 @@ const KPISection = ({ filters = {} }) => {
             {card.title}
           </h3>
 
-          <p className={`text-3xl font-bold mt-2 ${card.color}`}>
+          <p className={`text-2xl sm:text-3xl font-bold mt-2 break-words ${card.color}`}>
 
             {card.isText
               ? card.value

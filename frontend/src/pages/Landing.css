@@ -646,6 +646,10 @@
     gap: 8px 14px;
   }
 
+  .nav-actions {
+    margin-left: auto;
+  }
+
   .hero-proof,
   .trust-grid,
   .capability-grid,
@@ -681,6 +685,22 @@
 }
 
 @media (max-width: 560px) {
+  .navbar {
+    gap: 14px;
+  }
+
+  .nav-links,
+  .nav-actions {
+    width: 100%;
+  }
+
+  .nav-links button,
+  .nav-login {
+    width: 100%;
+    justify-content: center;
+    text-align: center;
+  }
+
   .hero-actions {
     flex-direction: column;
     align-items: stretch;
@@ -706,11 +726,16 @@
   }
 
   .hero-panel {
-    padding: 10px 12px;
+    display: none;
   }
 
   .hero-panel-top {
     top: 5%;
     right: 5%;
+  }
+
+  .orbit-ring,
+  .network-layer {
+    opacity: 0.55;
   }
 }

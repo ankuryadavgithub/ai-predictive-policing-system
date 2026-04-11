@@ -468,12 +468,12 @@ const PatrolRecommendation = () => {
       <motion.div
         initial={{ opacity: 0, y: -16 }}
         animate={{ opacity: 1, y: 0 }}
-        className="rounded-3xl border border-slate-200 bg-[radial-gradient(circle_at_top_right,_rgba(37,99,235,0.16),_transparent_32%),linear-gradient(135deg,_#0f172a,_#1e293b_48%,_#111827)] p-6 text-white shadow-xl"
+        className="rounded-3xl border border-slate-200 bg-[radial-gradient(circle_at_top_right,_rgba(37,99,235,0.16),_transparent_32%),linear-gradient(135deg,_#0f172a,_#1e293b_48%,_#111827)] p-4 sm:p-6 text-white shadow-xl"
       >
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
             <p className="text-xs uppercase tracking-[0.35em] text-cyan-200">Operations Intelligence</p>
-            <h1 className="mt-3 text-3xl font-bold">Patrol Recommendation Engine</h1>
+            <h1 className="mt-3 text-2xl sm:text-3xl font-bold">Patrol Recommendation Engine</h1>
             <p className="mt-3 text-sm text-slate-200">
               {isPoliceView && !useAdminFallback
                 ? `Convert predicted crime intensity into patrol priorities for ${assignedAreaLabel}.`
@@ -481,15 +481,15 @@ const PatrolRecommendation = () => {
             </p>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2 w-full lg:w-auto">
             <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
               <p className="text-xs uppercase tracking-[0.25em] text-slate-300">Coverage</p>
-              <p className="mt-2 text-2xl font-semibold">{recommendations.length}</p>
+              <p className="mt-2 text-xl sm:text-2xl font-semibold">{recommendations.length}</p>
               <p className="text-sm text-slate-300">priority zones analyzed</p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
               <p className="text-xs uppercase tracking-[0.25em] text-slate-300">Default Window</p>
-              <p className="mt-2 text-2xl font-semibold">
+              <p className="mt-2 text-xl sm:text-2xl font-semibold">
                 {selectedRecommendation?.responseWindow || "--"}
               </p>
               <p className="text-sm text-slate-300">recommended active patrol slot</p>
@@ -502,7 +502,7 @@ const PatrolRecommendation = () => {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="mt-6 grid gap-4 rounded-2xl bg-white p-5 shadow dark:bg-gray-800 md:grid-cols-3"
+          className="mt-6 grid gap-4 rounded-2xl bg-white p-4 sm:p-5 shadow dark:bg-gray-800 lg:grid-cols-3"
         >
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-gray-700 dark:bg-slate-900/40">
             <p className="text-sm font-medium text-slate-700 dark:text-white">Assigned Area</p>
@@ -544,7 +544,7 @@ const PatrolRecommendation = () => {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="mt-6 grid gap-4 rounded-2xl bg-white p-5 shadow dark:bg-gray-800 md:grid-cols-3"
+          className="mt-6 grid gap-4 rounded-2xl bg-white p-4 sm:p-5 shadow dark:bg-gray-800 lg:grid-cols-3"
         >
           <div>
             <label className="text-sm text-gray-500 dark:text-gray-300">State</label>
@@ -602,17 +602,17 @@ const PatrolRecommendation = () => {
       )}
 
       {loadingRecommendations ? (
-        <div className="mt-6 rounded-2xl bg-white p-8 text-sm text-gray-500 shadow dark:bg-gray-800 dark:text-gray-300">
+        <div className="mt-6 rounded-2xl bg-white p-5 sm:p-8 text-sm text-gray-500 shadow dark:bg-gray-800 dark:text-gray-300">
           {isPoliceView && !useAdminFallback && !assignedAreaResolved
             ? "Resolving assigned patrol area..."
             : "Building patrol recommendations from forecast data..."}
         </div>
       ) : recommendations.length === 0 ? (
-        <div className="mt-6 rounded-2xl bg-white p-8 text-sm text-gray-500 shadow dark:bg-gray-800 dark:text-gray-300">
+        <div className="mt-6 rounded-2xl bg-white p-5 sm:p-8 text-sm text-gray-500 shadow dark:bg-gray-800 dark:text-gray-300">
           No recommendation data is available for the selected filters.
         </div>
       ) : (
-        <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <div className="mt-6 grid gap-4 sm:gap-6 xl:grid-cols-[1.2fr_0.8fr]">
           <div className="space-y-4">
             {recommendations.map((item, index) => {
               const tone = getPriorityTone(item.band);
@@ -625,16 +625,16 @@ const PatrolRecommendation = () => {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.05 }}
                   onClick={() => setSelectedCity(item.city)}
-                  className={`w-full rounded-3xl border bg-white p-5 text-left shadow transition hover:-translate-y-0.5 hover:shadow-lg dark:bg-gray-800 ${
+                  className={`w-full rounded-3xl border bg-white p-4 sm:p-5 text-left shadow transition hover:-translate-y-0.5 hover:shadow-lg dark:bg-gray-800 ${
                     selectedRecommendation?.city === item.city
                       ? `${tone.border} ring-2 ring-offset-2 ring-offset-slate-100 dark:ring-offset-slate-950`
                       : "border-slate-200 dark:border-gray-700"
                   }`}
                 >
-                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div>
-                      <div className="flex items-center gap-3">
-                        <h2 className="text-xl font-semibold text-slate-800 dark:text-white">{item.city}</h2>
+                      <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
+                        <h2 className="text-lg sm:text-xl font-semibold text-slate-800 dark:text-white">{item.city}</h2>
                         <span className={`rounded-full px-3 py-1 text-xs font-semibold ${tone.badge}`}>
                           {item.band} Priority
                         </span>
@@ -642,7 +642,7 @@ const PatrolRecommendation = () => {
                       <p className="mt-2 text-sm text-slate-500 dark:text-slate-300">{item.rationale}</p>
                     </div>
 
-                    <div className="min-w-44">
+                    <div className="w-full sm:min-w-44 sm:max-w-52">
                       <div className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
                         <div
                           className={`h-full rounded-full bg-gradient-to-r ${tone.accent}`}
@@ -660,7 +660,7 @@ const PatrolRecommendation = () => {
             })}
           </div>
 
-          <div className="rounded-3xl bg-white p-6 shadow dark:bg-gray-800">
+          <div className="rounded-3xl bg-white p-4 sm:p-6 shadow dark:bg-gray-800">
             <h3 className="text-lg font-semibold text-slate-800 dark:text-white">
               {selectedRecommendation?.city || "Selected City"} Deployment Brief
             </h3>
@@ -700,7 +700,7 @@ const PatrolRecommendation = () => {
                     {selectedRecommendation.topCrimes.map((crime) => (
                       <div
                         key={crime.crime}
-                        className="flex items-center justify-between rounded-2xl border border-slate-200 px-4 py-3 dark:border-gray-700"
+                        className="flex flex-col items-start gap-2 rounded-2xl border border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between dark:border-gray-700"
                       >
                         <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
                           {crime.label}
@@ -734,7 +734,7 @@ const PatrolRecommendation = () => {
 const StatCard = ({ label, value }) => (
   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-gray-700 dark:bg-slate-900/40">
     <p className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">{label}</p>
-    <p className="mt-2 text-xl font-semibold text-slate-800 dark:text-white">{value}</p>
+    <p className="mt-2 text-lg sm:text-xl font-semibold text-slate-800 dark:text-white break-words">{value}</p>
   </div>
 );
 

@@ -19,12 +19,22 @@ const Heatmap = () => {
     city: "All",
     crimeType: "All",
     year: 2024,
-    dataset: "Historical"
+    dataset: "Historical",
+    mapMode: "heatmap",
+    areaLevel: "city",
   });
 
   const [viewState, setViewState] = useState({ ...baseView });
   const [historicalViewState, setHistoricalViewState] = useState({ ...baseView });
   const [predictedViewState, setPredictedViewState] = useState({ ...baseView });
+  const canCompare = filters.mapMode !== "forecast" && filters.mapMode !== "timeline";
+
+  useEffect(() => {
+    if (canCompare) {
+      return;
+    }
+    setSplitView(false);
+  }, [canCompare]);
 
   useEffect(() => {
     if (!splitView) {
@@ -55,12 +65,14 @@ const Heatmap = () => {
           <FilterPanel filters={filters} setFilters={setFilters} />
         </div>
 
-        <button
-          onClick={() => setSplitView(!splitView)}
-          className="px-4 py-3 bg-blue-600 text-white rounded shadow hover:bg-blue-700 dark:bg-gray-800 transition self-start"
-        >
-          {splitView ? "Single View" : "Compare View"}
-        </button>
+        {canCompare && (
+          <button
+            onClick={() => setSplitView(!splitView)}
+            className="px-4 py-3 bg-blue-600 text-white rounded shadow hover:bg-blue-700 dark:bg-gray-800 transition self-start"
+          >
+            {splitView ? "Single View" : "Compare View"}
+          </button>
+        )}
       </div>
 
       {splitView && (

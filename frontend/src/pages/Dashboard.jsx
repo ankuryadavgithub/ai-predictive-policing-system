@@ -23,6 +23,8 @@ const Dashboard = () => {
     crimeType: "All",
     year: 2024,
     dataset: "Historical",
+    mapMode: "hexbin",
+    areaLevel: "city",
   });
 
   return (

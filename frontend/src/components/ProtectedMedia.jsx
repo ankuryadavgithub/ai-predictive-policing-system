@@ -7,16 +7,30 @@ const ProtectedMedia = ({ file, className = "", alt = "evidence" }) => {
 
   useEffect(() => {
     let currentUrl = "";
+    let isActive = true;
+    const controller = new AbortController();
 
     const loadMedia = async () => {
       try {
+        setObjectUrl("");
         setError(false);
-        const res = await api.get(file.access_url, {
+        const cacheKey = encodeURIComponent(
+          `${file.id ?? "unknown"}-${file.access_count ?? 0}-${file.uploaded_at ?? "na"}`
+        );
+        const separator = file.access_url.includes("?") ? "&" : "?";
+        const res = await api.get(`${file.access_url}${separator}v=${cacheKey}`, {
           responseType: "blob",
+          signal: controller.signal,
         });
+        if (!isActive) {
+          return;
+        }
         currentUrl = URL.createObjectURL(res.data);
         setObjectUrl(currentUrl);
       } catch (err) {
+        if (controller.signal.aborted || !isActive) {
+          return;
+        }
         console.error("Failed to load protected media", err);
         setError(true);
       }
@@ -27,11 +41,13 @@ const ProtectedMedia = ({ file, className = "", alt = "evidence" }) => {
     }
 
     return () => {
+      isActive = false;
+      controller.abort();
       if (currentUrl) {
         URL.revokeObjectURL(currentUrl);
       }
     };
-  }, [file]);
+  }, [file?.id, file?.access_url, file?.access_count, file?.uploaded_at]);
 
   if (error) {
     return (

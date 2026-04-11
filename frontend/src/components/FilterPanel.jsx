@@ -36,6 +36,22 @@ const FilterPanel = ({ filters, setFilters }) => {
         };
       }
 
+      if (field === "mapMode") {
+        if (value === "forecast") {
+          return {
+            ...prev,
+            mapMode: value,
+            dataset: "Predicted",
+            year: Math.max(prev.year, 2026),
+          };
+        }
+
+        return {
+          ...prev,
+          mapMode: value,
+        };
+      }
+
       if (field === "state") {
         return {
           ...prev,
@@ -99,7 +115,9 @@ useEffect(() => {
       city: "All",
       crimeType:"All",
       year:2024,
-      dataset:"Historical"
+      dataset:"Historical",
+      mapMode:"hexbin",
+      areaLevel:"city"
     });
   };
 
@@ -111,7 +129,7 @@ useEffect(() => {
       className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow mb-6"
     >
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-7 gap-4">
 
         <div>
           <label className="text-sm text-gray-500 dark:text-white">State</label>
@@ -224,6 +242,22 @@ useEffect(() => {
         </div>
 
         <div>
+          <label className="text-sm text-gray-500 dark:text-white">Map Type</label>
+          <select
+            value={filters.mapMode || "hexbin"}
+            onChange={(e)=>handleChange("mapMode",e.target.value)}
+            className="bg-white dark:bg-gray-800 dark:text-white w-full mt-1 p-2 border rounded"
+          >
+            <option value="heatmap">Classic Heatmap</option>
+            <option value="hexbin">Hexbin Hotspots</option>
+            <option value="incidents">Incident Map</option>
+            <option value="area">Area Crime Map</option>
+            <option value="forecast">Forecast Risk Map</option>
+            <option value="timeline">Timeline Map</option>
+          </select>
+        </div>
+
+        <div>
           <label className="text-sm text-gray-500 dark:text-white">Dataset</label>
           <select
             value={filters.dataset}
@@ -235,6 +269,20 @@ useEffect(() => {
             <option>Combined</option>
           </select>
         </div>
+
+        {filters.mapMode === "area" && (
+          <div>
+            <label className="text-sm text-gray-500 dark:text-white">Area Level</label>
+            <select
+              value={filters.areaLevel || "city"}
+              onChange={(e)=>handleChange("areaLevel",e.target.value)}
+              className="bg-white dark:bg-gray-800 dark:text-white w-full mt-1 p-2 border rounded"
+            >
+              <option value="city">City</option>
+              <option value="district">District</option>
+            </select>
+          </div>
+        )}
 
         <div className="flex items-end md:col-span-2 xl:col-span-1">
           <button

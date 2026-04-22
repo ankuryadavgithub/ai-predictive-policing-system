@@ -1,0 +1,69 @@
+{
+  "artifact_version": 2,
+  "dataset_path": "D:\\Major Project\\predictive-policing-system\\backend\\india_cities_crime_2020_2025.csv",
+  "sequence_length": 4,
+  "city_count": 6674,
+  "neighbor_count": 8,
+  "feature_dim": 18,
+  "target_dim": 18,
+  "years": [
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "predicted_historical_years": [
+    2024,
+    2025
+  ],
+  "dataset_splits": {
+    "train_cities": 4671,
+    "validation_cities": 1001,
+    "test_cities": 1002
+  },
+  "risk_band_thresholds": {
+    "low_max": 39.0,
+    "medium_max": 86.0
+  },
+  "train": {
+    "rmse": 46.803123938267596,
+    "mae": 2.055091700563762,
+    "r2": 0.9955151943947363,
+    "mape": 2.521736192806024,
+    "accuracy_within_20pct": 0.9938925759413878,
+    "risk_band_accuracy": 0.9334189681010491,
+    "risk_band_macro_f1": 0.9328337843070144,
+    "total_crime_rmse": 167.93239514302005,
+    "total_crime_mae": 17.540462427745666,
+    "sample_count": 9342
+  },
+  "validation": {
+    "rmse": 57.689873852536245,
+    "mae": 2.305805305805306,
+    "r2": 0.9950457696188402,
+    "mape": 2.418022710421697,
+    "accuracy_within_20pct": 0.9946719946719946,
+    "risk_band_accuracy": 0.9410589410589411,
+    "risk_band_macro_f1": 0.9412095228815486,
+    "total_crime_rmse": 207.23809826050174,
+    "total_crime_mae": 20.511488511488512,
+    "sample_count": 2002
+  },
+  "test": {
+    "rmse": 35.391928466482646,
+    "mae": 2.1199822577068086,
+    "r2": 0.9900225482559413,
+    "mape": 2.5679165396438033,
+    "accuracy_within_20pct": 0.9940951430472389,
+    "risk_band_accuracy": 0.9431137724550899,
+    "risk_band_macro_f1": 0.9426871116034802,
+    "total_crime_rmse": 136.07651290825123,
+    "total_crime_mae": 19.791417165668662,
+    "sample_count": 2004
+  },
+  "best_epoch": 28,
+  "best_val_loss": 0.00030776066705584526,
+  "predictions_csv": "D:\\Major Project\\predictive-policing-system\\backend\\ml\\historical_backtest_predictions.csv"
+}

@@ -11,7 +11,7 @@ import SatelliteScan from "../components/SatelliteScan";
 import "./Auth.css";
 
 const loginHighlights = [
-  "Citizen accounts can report incidents and track their submissions.",
+  "Citizen accounts become available after Aadhaar verification is approved.",
   "Police accounts gain access after admin approval.",
   "Admin access requires an approved account and valid credentials.",
 ];
@@ -164,7 +164,7 @@ const Login = () => {
               </div>
 
               <div className="auth-inline-note">
-                Police accounts may remain unavailable until an administrator approves them.
+                Citizen and police accounts may remain unavailable until an administrator approves them.
               </div>
 
               <motion.button

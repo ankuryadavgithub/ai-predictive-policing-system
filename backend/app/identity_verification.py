@@ -495,18 +495,6 @@ def create_pending_or_approved_citizen(
         liveness_frames=liveness_frames,
     )
 
-    decision = build_verification_decision(
-        aadhaar_card_path=artifacts.aadhaar_card_path,
-        live_selfie_path=artifacts.live_selfie_path,
-        liveness_frames_path=artifacts.liveness_frames_path,
-    )
-    decision = _downgrade_to_manual_review(decision)
-
-    if decision.aadhaar_masked:
-        existing_masked = db.query(User).filter(User.government_id == decision.aadhaar_masked).first()
-        if existing_masked:
-            raise HTTPException(status_code=409, detail="A citizen account already exists for this Aadhaar number")
-
     verification = IdentityVerification(
         role="citizen",
         full_name=full_name,
@@ -517,13 +505,13 @@ def create_pending_or_approved_citizen(
         city=city,
         gps_consent=gps_permission,
         password_hash=hash_password(password),
-        aadhaar_masked=decision.aadhaar_masked,
-        verification_status=decision.status,
-        ocr_status=decision.ocr_status,
-        liveness_status=decision.liveness_status,
-        face_match_status=decision.face_match_status,
-        face_match_score=decision.face_match_score,
-        rejection_reason=decision.rejection_reason,
+        aadhaar_masked=None,
+        verification_status="pending_manual_review",
+        ocr_status="pending",
+        liveness_status="pending",
+        face_match_status="pending",
+        face_match_score=None,
+        rejection_reason="Citizen account is under Aadhaar verification and awaiting admin review",
         aadhaar_card_path=artifacts.aadhaar_card_path,
         live_selfie_path=artifacts.live_selfie_path,
         liveness_frames_path=artifacts.liveness_frames_path,
@@ -535,10 +523,9 @@ def create_pending_or_approved_citizen(
     created_user = None
 
     logger.info(
-        "Citizen identity verification created username=%s status=%s score=%s",
+        "Citizen identity verification queued for admin review username=%s status=%s",
         username,
-        decision.status,
-        decision.face_match_score,
+        verification.verification_status,
     )
     return verification, created_user
 

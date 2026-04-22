@@ -7,7 +7,7 @@ from app.audit import logger
 from app.config import settings
 from app.dependencies import get_current_user, get_db, get_token_from_request
 from app.identity_verification import create_pending_or_approved_citizen
-from app.models import User
+from app.models import IdentityVerification, User
 from app.rate_limit import enforce_rate_limit
 from app.schemas import (
     AuthUserResponse,
@@ -58,6 +58,28 @@ def _set_auth_cookie(response: Response, token: str) -> None:
         max_age=settings.access_token_expire_minutes * 60,
         expires=settings.access_token_expire_minutes * 60,
         path="/",
+    )
+
+
+def _raise_citizen_verification_login_status(db: Session, username: str, password: str) -> None:
+    verification = (
+        db.query(IdentityVerification)
+        .filter(IdentityVerification.username == username)
+        .order_by(IdentityVerification.created_at.desc(), IdentityVerification.id.desc())
+        .first()
+    )
+    if not verification or not verify_password(password, verification.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    if verification.verification_status == "rejected":
+        raise HTTPException(
+            status_code=403,
+            detail=verification.rejection_reason or "Your citizen account was rejected during Aadhaar verification.",
+        )
+
+    raise HTTPException(
+        status_code=403,
+        detail="Your account is under Aadhaar verification. Kindly wait for admin approval before logging in.",
     )
 
 
@@ -214,7 +236,7 @@ def register_verified_citizen(
 
     return {
         "status": "pending_manual_review",
-        "message": "Citizen verification needs manual review. An admin will review your submission shortly.",
+        "message": "Your account is under Aadhaar verification. Kindly wait for admin review and approval.",
         "verification_id": verification.id,
         "user_id": None,
     }
@@ -235,7 +257,10 @@ def login(
     )
 
     user = db.query(User).filter(User.username == payload.username).first()
-    if not user or not verify_password(payload.password, user.password_hash):
+    if not user:
+        _raise_citizen_verification_login_status(db, payload.username, payload.password)
+
+    if not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid username or password")
 
     if user.status != "approved":

@@ -144,8 +144,8 @@ const Register = () => {
         message:
           res.status === "pending"
             ? "Registration submitted. Your police account is pending admin approval."
-            : res.status === "pending_manual_review"
-            ? "Verification submitted. Your citizen account is pending manual review."
+          : res.status === "pending_manual_review"
+            ? res.message || "Your account is under Aadhaar verification. Kindly wait for admin review and approval."
             : res.status === "rejected"
             ? res.message || "Citizen verification was rejected."
             : "Registration successful. You can now sign in.",

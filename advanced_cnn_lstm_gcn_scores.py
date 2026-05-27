@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import pickle
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -781,7 +782,15 @@ def train_and_score(
     prediction_rows = build_prediction_rows(bundle, split, actual_by_period, predicted_by_period)
     prediction_path = output_dir / "historical_backtest_predictions.csv"
     metrics_path = output_dir / "historical_backtest_metrics.json"
+    model_path = output_dir / "advanced_cnn_lstm_gcn_model.pt"
+    scaler_path = output_dir / "advanced_cnn_lstm_gcn_scaler.pkl"
+    columns_path = output_dir / "advanced_cnn_lstm_gcn_crime_columns.json"
+
     prediction_rows.to_csv(prediction_path, index=False)
+    torch.save(model.state_dict(), model_path)
+    with scaler_path.open("wb") as scaler_file:
+        pickle.dump(bundle.scaler, scaler_file)
+    columns_path.write_text(json.dumps(bundle.crime_columns, indent=2), encoding="utf-8")
 
     artifact = {
         "artifact_version": 2,
@@ -805,6 +814,9 @@ def train_and_score(
         "best_epoch": best_epoch,
         "best_val_loss": best_val_loss,
         "predictions_csv": str(prediction_path),
+        "model_checkpoint": str(model_path),
+        "scaler_checkpoint": str(scaler_path),
+        "crime_columns_path": str(columns_path),
     }
     metrics_path.write_text(json.dumps(artifact, indent=2), encoding="utf-8")
 

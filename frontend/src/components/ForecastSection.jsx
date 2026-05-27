@@ -18,6 +18,7 @@ const ForecastSection = ({ filters = {} }) => {
   const [growth,setGrowth] = useState(0);
   const [risk,setRisk] = useState("Low");
   const [displayGrowth,setDisplayGrowth] = useState(0);
+  const [livePrediction,setLivePrediction] = useState(null);
 
   const state = filters.state ?? "All";
   const city = filters.city ?? "All";
@@ -86,6 +87,27 @@ const ForecastSection = ({ filters = {} }) => {
 
   },[state,city,crimeType,dataset]);
 
+  useEffect(() => {
+    const fetchLivePrediction = async () => {
+      if (dataset === "Historical" || city === "All") {
+        setLivePrediction(null);
+        return;
+      }
+
+      try {
+        const res = await api.get("/forecast/live", {
+          params: { state, city },
+        });
+        setLivePrediction(res.data);
+      } catch (err) {
+        console.error("Live forecast error", err);
+        setLivePrediction(null);
+      }
+    };
+
+    fetchLivePrediction();
+  }, [city, state, dataset]);
+
 
 
   /* ---------- Animated Counter ---------- */
@@ -142,6 +164,28 @@ const ForecastSection = ({ filters = {} }) => {
 
         </div>
 
+      </div>
+
+      {dataset !== "Historical" && city !== "All" && livePrediction && (
+        <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+          <div className="font-semibold mb-1">Live model forecast for {livePrediction.city}</div>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <div>
+              <div className="text-xs uppercase tracking-wide text-slate-500">Risk index</div>
+              <div className="text-lg font-semibold text-amber-600 dark:text-amber-300">{livePrediction.crime_risk_index.toFixed(1)}</div>
+            </div>
+            <div>
+              <div className="text-xs uppercase tracking-wide text-slate-500">Total estimate</div>
+              <div className="text-lg font-semibold text-rose-600 dark:text-rose-300">{livePrediction.predicted_crimes?.Total_Estimated_Crimes ?? 0}</div>
+            </div>
+            <div>
+              <div className="text-xs uppercase tracking-wide text-slate-500">Location</div>
+              <div className="text-lg font-semibold text-slate-800 dark:text-slate-100">{livePrediction.state}, {livePrediction.district}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
         {/* Animated Stats */}
 
         <motion.div
@@ -173,8 +217,6 @@ const ForecastSection = ({ filters = {} }) => {
           </p>
 
         </motion.div>
-
-      </div>
 
       {dataset === "Historical" && (
         <div className="flex items-center justify-center h-[260px] text-sm text-gray-500 dark:text-gray-300">

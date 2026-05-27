@@ -9,14 +9,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-
 PROJECT_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = PROJECT_DIR / "backend"
 ML_OUTPUT_DIR = BACKEND_DIR / "ml"
 
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
-
 
 METADATA_COLUMNS = {
     "State",
@@ -26,6 +24,8 @@ METADATA_COLUMNS = {
     "Longitude",
     "Population",
     "Year",
+    "Month",
+    "Quarter",
 }
 STATE_COLUMN = "State"
 DISTRICT_COLUMN = "District"
@@ -34,6 +34,9 @@ LATITUDE_COLUMN = "Latitude"
 LONGITUDE_COLUMN = "Longitude"
 POPULATION_COLUMN = "Population"
 YEAR_COLUMN = "Year"
+MONTH_COLUMN = "Month"
+QUARTER_COLUMN = "Quarter"
+TIME_PERIOD_COLUMN = "TimePeriod"
 DEFAULT_DATASET = BACKEND_DIR / "india_cities_crime_2020_2025.csv"
 DEFAULT_SEQUENCE_LENGTH = 4
 DEFAULT_NEIGHBORS = 8
@@ -85,12 +88,14 @@ class CrimeScaler:
 @dataclass
 class HistoricalBacktestBundle:
     crime_columns: list[str]
-    city_names: list[str]
-    city_metadata: pd.DataFrame
-    target_years: list[int]
+    location_ids: list[str]
+    location_metadata: pd.DataFrame
+    target_periods: list[pd.Period]
     edge_index: "torch.Tensor"
-    inputs_by_year: dict[int, np.ndarray]
-    targets_by_year: dict[int, np.ndarray]
+    inputs_by_period: dict[pd.Period, np.ndarray]
+    targets_by_period: dict[pd.Period, np.ndarray]
+    baselines_by_period: dict[pd.Period, np.ndarray]  # Holds the scaled baseline (previous slice)
+    previous_deltas_by_period: dict[pd.Period, np.ndarray]
     scaler: CrimeScaler
 
 
@@ -102,12 +107,13 @@ def import_dependencies():
         from sklearn.model_selection import train_test_split
         from sklearn.neighbors import NearestNeighbors
         from sklearn.preprocessing import MinMaxScaler
-    except ImportError as exc:  # pragma: no cover - environment-specific
+    except ImportError as exc:
         raise RuntimeError(
             "Missing ML dependencies. Install numpy, pandas, scikit-learn, torch, and torch-geometric."
         ) from exc
 
     from torch_geometric.nn import GCNConv
+    from torch_geometric.utils import subgraph
 
     return (
         torch,
@@ -120,11 +126,12 @@ def import_dependencies():
         NearestNeighbors,
         MinMaxScaler,
         GCNConv,
+        subgraph,
     )
 
 
 def build_model_class():
-    torch, nn, *_rest, GCNConv = import_dependencies()
+    torch, nn, *_rest, GCNConv, _subgraph = import_dependencies()
 
     class AdvancedCNNLSTMGCN(nn.Module):
         def __init__(self, num_features: int):
@@ -141,6 +148,7 @@ def build_model_class():
             self.delta_scale = nn.Parameter(torch.tensor(0.10))
 
         def forward(self, x, edge_index):
+            # x shape: [nodes, timesteps, features]
             gcn_outputs = []
             for timestep in range(x.size(1)):
                 xt = self.gcn(x[:, timestep, :], edge_index)
@@ -157,10 +165,13 @@ def build_model_class():
             lstm_out, _ = self.lstm(features)
             last_hidden = self.dropout(lstm_out[:, -1, :])
             delta = torch.relu(self.fc1(last_hidden))
-            delta = torch.tanh(self.fc2(delta))
-            residual = x[:, -1, :]
-            output = residual + self.delta_scale * delta
-            return torch.clamp(output, 0.0, 1.0)
+            
+            # Predicts the change vector bounded tightly to avoid exploding scales
+            predicted_delta = torch.tanh(self.fc2(delta)) * self.delta_scale
+            
+            # Residual calculation is now handled relative to the external baseline in training loop,
+            # or directly within the model structure when predicting changes.
+            return predicted_delta
 
     return AdvancedCNNLSTMGCN
 
@@ -169,57 +180,92 @@ def detect_crime_columns(df: pd.DataFrame) -> list[str]:
     return [column for column in df.columns if column not in METADATA_COLUMNS]
 
 
-def build_city_metadata(df: pd.DataFrame) -> pd.DataFrame:
+def detect_time_frequency(df: pd.DataFrame) -> tuple[str, str]:
+    if MONTH_COLUMN in df.columns:
+        return MONTH_COLUMN, "M"
+    if QUARTER_COLUMN in df.columns:
+        return QUARTER_COLUMN, "Q"
+    return YEAR_COLUMN, "Y"
+
+
+def build_time_period_index(df: pd.DataFrame, time_column: str) -> pd.PeriodIndex:
+    if time_column == MONTH_COLUMN:
+        return pd.PeriodIndex.from_fields(
+            year=df[YEAR_COLUMN].astype(int),
+            month=df[MONTH_COLUMN].astype(int),
+            freq="M",
+        )
+    if time_column == QUARTER_COLUMN:
+        return pd.PeriodIndex.from_fields(
+            year=df[YEAR_COLUMN].astype(int),
+            quarter=df[QUARTER_COLUMN].astype(int),
+            freq="Q",
+        )
+    return pd.PeriodIndex(df[YEAR_COLUMN].astype(int).astype(str), freq="Y")
+
+
+def build_location_identifier(df: pd.DataFrame) -> pd.Series:
+    return df[STATE_COLUMN].astype(str).str.strip() + "||" + df[DISTRICT_COLUMN].astype(str).str.strip()
+
+
+def build_location_metadata(df: pd.DataFrame) -> pd.DataFrame:
+    location_ids = build_location_identifier(df)
+    metadata = df.copy()
+    metadata["location_id"] = location_ids
     return (
-        df.sort_values(YEAR_COLUMN)
-        .groupby(CITY_COLUMN)
+        metadata.groupby("location_id", as_index=False)
         .agg(
             state=(STATE_COLUMN, "last"),
             district=(DISTRICT_COLUMN, "last"),
-            latitude=(LATITUDE_COLUMN, "last"),
-            longitude=(LONGITUDE_COLUMN, "last"),
-            population=(POPULATION_COLUMN, "last"),
+            latitude=(LATITUDE_COLUMN, "mean"),
+            longitude=(LONGITUDE_COLUMN, "mean"),
+            population=(POPULATION_COLUMN, "sum"),
         )
+        .set_index("location_id")
     )
 
 
-def build_city_year_matrix(df: pd.DataFrame, crime_columns: list[str]) -> pd.DataFrame:
+def build_location_time_matrix(df: pd.DataFrame, crime_columns: list[str]) -> pd.DataFrame:
+    df = df.copy()
+    df[TIME_PERIOD_COLUMN] = build_time_period_index(df, detect_time_frequency(df))
+    df["location_id"] = build_location_identifier(df)
     return (
-        df.groupby([CITY_COLUMN, YEAR_COLUMN], as_index=False)[crime_columns]
+        df.groupby(["location_id", TIME_PERIOD_COLUMN], as_index=False)[crime_columns]
         .sum()
-        .sort_values([CITY_COLUMN, YEAR_COLUMN])
+        .sort_values(["location_id", TIME_PERIOD_COLUMN])
     )
 
 
-def infer_target_years(df: pd.DataFrame, sequence_length: int) -> list[int]:
-    years = sorted(df[YEAR_COLUMN].unique().tolist())
-    if len(years) <= sequence_length:
-        raise ValueError("The dataset does not contain enough years for the requested sequence length.")
-    return years[sequence_length:]
+def infer_target_periods(df: pd.DataFrame, sequence_length: int) -> list[pd.Period]:
+    time_column, _freq = detect_time_frequency(df)
+    periods = sorted(build_time_period_index(df, time_column).unique().tolist())
+    if len(periods) <= sequence_length:
+        raise ValueError("The dataset does not contain enough time periods for the requested sequence length.")
+    return periods[sequence_length:]
 
 
-def eligible_cities_for_targets(
-    city_year_matrix: pd.DataFrame,
-    target_years: list[int],
+def eligible_locations_for_targets(
+    location_time_matrix: pd.DataFrame,
+    target_periods: list[pd.Period],
     sequence_length: int,
 ) -> list[str]:
     eligible: list[str] = []
-    for city, city_data in city_year_matrix.groupby(CITY_COLUMN):
-        available_years = set(city_data[YEAR_COLUMN].tolist())
+    for location_id, location_data in location_time_matrix.groupby("location_id"):
+        available_periods = set(location_data[TIME_PERIOD_COLUMN].tolist())
         is_valid = True
-        for target_year in target_years:
-            required_years = set(range(target_year - sequence_length, target_year + 1))
-            if not required_years.issubset(available_years):
+        for target_period in target_periods:
+            required_periods = {target_period - offset for offset in range(sequence_length + 1)}
+            if not required_periods.issubset(available_periods):
                 is_valid = False
                 break
         if is_valid:
-            eligible.append(city)
+            eligible.append(location_id)
     if not eligible:
-        raise ValueError("No cities have enough continuous yearly history for historical backtesting.")
+        raise ValueError("No locations have enough continuous history for periodic backtesting.")
     return sorted(eligible)
 
 
-def split_cities(city_names: list[str], val_size: float, test_size: float, random_state: int) -> SplitIndices:
+def split_locations(location_ids: list[str], val_size: float, test_size: float, random_state: int) -> SplitIndices:
     (
         _torch,
         _nn,
@@ -231,9 +277,10 @@ def split_cities(city_names: list[str], val_size: float, test_size: float, rando
         _NearestNeighbors,
         _MinMaxScaler,
         _GCNConv,
+        _subgraph,
     ) = import_dependencies()
 
-    indices = list(range(len(city_names)))
+    indices = list(range(len(location_ids)))
     train_val_indices, test_indices = train_test_split(
         indices,
         test_size=test_size,
@@ -254,7 +301,7 @@ def split_cities(city_names: list[str], val_size: float, test_size: float, rando
     )
 
 
-def fit_scaler(df: pd.DataFrame, crime_columns: list[str], train_city_names: list[str]):
+def fit_scaler(df: pd.DataFrame, crime_columns: list[str], train_location_ids: list[str]):
     (
         _torch,
         _nn,
@@ -266,9 +313,12 @@ def fit_scaler(df: pd.DataFrame, crime_columns: list[str], train_city_names: lis
         _NearestNeighbors,
         MinMaxScaler,
         _GCNConv,
+        _subgraph,
     ) = import_dependencies()
 
-    train_rows = df[df[CITY_COLUMN].isin(train_city_names)]
+    df = df.copy()
+    df["location_id"] = build_location_identifier(df)
+    train_rows = df[df["location_id"].isin(train_location_ids)]
     if train_rows.empty:
         raise ValueError("No training rows available for scaler fitting.")
 
@@ -296,6 +346,7 @@ def build_backtest_bundle(
         NearestNeighbors,
         _MinMaxScaler,
         _GCNConv,
+        _subgraph,
     ) = import_dependencies()
 
     df = pd.read_csv(dataset_path)
@@ -303,16 +354,16 @@ def build_backtest_bundle(
     if not crime_columns:
         raise ValueError("No crime columns were detected in the dataset.")
 
-    city_metadata = build_city_metadata(df)
-    city_year_matrix = build_city_year_matrix(df, crime_columns)
-    target_years = infer_target_years(df, sequence_length)
-    city_names = eligible_cities_for_targets(city_year_matrix, target_years, sequence_length)
-    split = split_cities(city_names, val_size=val_size, test_size=test_size, random_state=random_state)
-    scaler = fit_scaler(df, crime_columns, [city_names[index] for index in split.train])
+    location_metadata = build_location_metadata(df)
+    location_time_matrix = build_location_time_matrix(df, crime_columns)
+    target_periods = infer_target_periods(df, sequence_length)
+    location_ids = eligible_locations_for_targets(location_time_matrix, target_periods, sequence_length)
+    split = split_locations(location_ids, val_size=val_size, test_size=test_size, random_state=random_state)
+    scaler = fit_scaler(df, crime_columns, [location_ids[index] for index in split.train])
 
-    city_metadata = city_metadata.loc[city_names]
-    coordinates = np.radians(city_metadata[["latitude", "longitude"]].to_numpy(dtype=np.float32))
-    effective_neighbors = min(neighbors + 1, len(city_names))
+    location_metadata = location_metadata.loc[location_ids]
+    coordinates = np.radians(location_metadata[["latitude", "longitude"]].to_numpy(dtype=np.float32))
+    effective_neighbors = min(neighbors + 1, len(location_ids))
     nbrs = NearestNeighbors(n_neighbors=effective_neighbors, metric="haversine")
     nbrs.fit(coordinates)
     _, neighbor_indices = nbrs.kneighbors(coordinates)
@@ -325,36 +376,54 @@ def build_backtest_bundle(
         edge_pairs = [[0, 0]]
     edge_index = torch.tensor(edge_pairs, dtype=torch.long).t().contiguous()
 
-    inputs_by_year: dict[int, np.ndarray] = {}
-    targets_by_year: dict[int, np.ndarray] = {}
+    inputs_by_period: dict[pd.Period, np.ndarray] = {}
+    targets_by_period: dict[pd.Period, np.ndarray] = {}
+    baselines_by_period: dict[pd.Period, np.ndarray] = {}
+    previous_deltas_by_period: dict[pd.Period, np.ndarray] = {}
     grouped = {
-        city: city_data.sort_values(YEAR_COLUMN).set_index(YEAR_COLUMN)
-        for city, city_data in city_year_matrix.groupby(CITY_COLUMN)
+        location_id: location_data.sort_values(TIME_PERIOD_COLUMN).set_index(TIME_PERIOD_COLUMN)
+        for location_id, location_data in location_time_matrix.groupby("location_id")
     }
 
-    for target_year in target_years:
-        yearly_inputs: list[np.ndarray] = []
-        yearly_targets: list[np.ndarray] = []
-        input_years = list(range(target_year - sequence_length, target_year))
+    for target_period in target_periods:
+        period_inputs: list[np.ndarray] = []
+        period_targets: list[np.ndarray] = []
+        period_baselines: list[np.ndarray] = []
+        input_periods = [target_period - offset for offset in range(sequence_length, 0, -1)]
 
-        for city in city_names:
-            city_frame = grouped[city]
-            input_block = city_frame.loc[input_years, crime_columns].to_numpy(dtype=np.float32)
-            target_row = city_frame.loc[target_year, crime_columns].to_numpy(dtype=np.float32)
-            yearly_inputs.append(input_block)
-            yearly_targets.append(target_row)
+        for location_id in location_ids:
+            location_frame = grouped[location_id]
+            input_block = location_frame.loc[input_periods, crime_columns].to_numpy(dtype=np.float32)
+            target_row = location_frame.loc[target_period, crime_columns].to_numpy(dtype=np.float32)
+            baseline_row = location_frame.loc[target_period - 1, crime_columns].to_numpy(dtype=np.float32)
 
-        inputs_by_year[target_year] = scaler.transform(np.array(yearly_inputs, dtype=np.float32))
-        targets_by_year[target_year] = scaler.transform(np.array(yearly_targets, dtype=np.float32))
+            period_inputs.append(input_block)
+            period_targets.append(target_row)
+            period_baselines.append(baseline_row)
+
+        scaled_inputs = scaler.transform(np.array(period_inputs, dtype=np.float32))
+        scaled_targets = scaler.transform(np.array(period_targets, dtype=np.float32))
+        scaled_baselines = scaler.transform(np.array(period_baselines, dtype=np.float32))
+
+        inputs_by_period[target_period] = scaled_inputs
+        targets_by_period[target_period] = scaled_targets - scaled_baselines
+        baselines_by_period[target_period] = scaled_baselines
+        previous_deltas_by_period[target_period] = (
+            scaled_inputs[:, -1, :] - scaled_inputs[:, -2, :]
+            if sequence_length >= 2
+            else np.zeros_like(scaled_targets)
+        )
 
     bundle = HistoricalBacktestBundle(
         crime_columns=crime_columns,
-        city_names=city_names,
-        city_metadata=city_metadata,
-        target_years=target_years,
+        location_ids=location_ids,
+        location_metadata=location_metadata,
+        target_periods=target_periods,
         edge_index=edge_index,
-        inputs_by_year=inputs_by_year,
-        targets_by_year=targets_by_year,
+        inputs_by_period=inputs_by_period,
+        targets_by_period=targets_by_period,
+        baselines_by_period=baselines_by_period,
+        previous_deltas_by_period=previous_deltas_by_period,
         scaler=scaler,
     )
     return bundle, split
@@ -379,7 +448,13 @@ def classify_risk_bands(total_values: np.ndarray, low_threshold: float, medium_t
     return labels
 
 
-def evaluate_predictions(true_actual: np.ndarray, pred_actual: np.ndarray, crime_columns: list[str], thresholds=None) -> dict[str, float]:
+def evaluate_predictions(
+    true_actual: np.ndarray,
+    pred_actual: np.ndarray,
+    crime_columns: list[str],
+    thresholds=None,
+    baselines: np.ndarray | None = None,
+) -> dict[str, float]:
     (
         _torch,
         _nn,
@@ -391,6 +466,7 @@ def evaluate_predictions(true_actual: np.ndarray, pred_actual: np.ndarray, crime
         _NearestNeighbors,
         _MinMaxScaler,
         _GCNConv,
+        _subgraph,
     ) = import_dependencies()
 
     flattened_true = true_actual.reshape(-1)
@@ -398,6 +474,12 @@ def evaluate_predictions(true_actual: np.ndarray, pred_actual: np.ndarray, crime
     rmse = float(np.sqrt(mean_squared_error(flattened_true, flattened_pred)))
     mae = float(mean_absolute_error(flattened_true, flattened_pred))
     r2 = float(r2_score(flattened_true, flattened_pred))
+    if baselines is not None:
+        delta_true = (true_actual - baselines).reshape(-1)
+        delta_pred = (pred_actual - baselines).reshape(-1)
+        delta_r2 = float(r2_score(delta_true, delta_pred))
+    else:
+        delta_r2 = 0.0
     denominator = np.where(flattened_true == 0, 1.0, flattened_true)
     mape = float(np.mean(np.abs((flattened_true - flattened_pred) / denominator)) * 100)
     within_20pct = float(np.mean((np.abs(flattened_true - flattened_pred) / denominator) <= 0.20))
@@ -422,6 +504,7 @@ def evaluate_predictions(true_actual: np.ndarray, pred_actual: np.ndarray, crime
         "rmse": rmse,
         "mae": mae,
         "r2": r2,
+        "delta_r2": delta_r2,
         "mape": mape,
         "accuracy_within_20pct": within_20pct,
         "risk_band_accuracy": risk_band_accuracy,
@@ -435,23 +518,23 @@ def evaluate_predictions(true_actual: np.ndarray, pred_actual: np.ndarray, crime
 
 
 def collect_split_arrays(
-    actual_by_year: dict[int, np.ndarray],
-    predicted_by_year: dict[int, np.ndarray],
+    actual_by_period: dict[pd.Period, np.ndarray],
+    predicted_by_period: dict[pd.Period, np.ndarray],
     indices: list[int],
 ) -> tuple[np.ndarray, np.ndarray]:
     true_rows: list[np.ndarray] = []
     pred_rows: list[np.ndarray] = []
-    for target_year in sorted(actual_by_year):
-        true_rows.append(actual_by_year[target_year][indices])
-        pred_rows.append(predicted_by_year[target_year][indices])
+    for target_period in sorted(actual_by_period):
+        true_rows.append(actual_by_period[target_period][indices])
+        pred_rows.append(predicted_by_period[target_period][indices])
     return np.vstack(true_rows), np.vstack(pred_rows)
 
 
 def build_prediction_rows(
     bundle: HistoricalBacktestBundle,
     split: SplitIndices,
-    actual_by_year: dict[int, np.ndarray],
-    predicted_by_year: dict[int, np.ndarray],
+    actual_by_period: dict[pd.Period, np.ndarray],
+    predicted_by_period: dict[pd.Period, np.ndarray],
 ) -> pd.DataFrame:
     split_lookup: dict[int, str] = {}
     for index in split.train:
@@ -462,21 +545,22 @@ def build_prediction_rows(
         split_lookup[index] = "test"
 
     rows: list[dict[str, object]] = []
-    for target_year in bundle.target_years:
-        for city_index, city_name in enumerate(bundle.city_names):
-            city_meta = bundle.city_metadata.loc[city_name]
+    for target_period in bundle.target_periods:
+        for location_index, location_id in enumerate(bundle.location_ids):
+            location_meta = bundle.location_metadata.loc[location_id]
             row = {
-                "state": city_meta["state"],
-                "district": city_meta["district"],
-                "city": city_name,
-                "latitude": float(city_meta["latitude"]),
-                "longitude": float(city_meta["longitude"]),
-                "population": float(city_meta["population"]) if pd.notna(city_meta["population"]) else 0.0,
-                "year": int(target_year),
-                "dataset_split": split_lookup[city_index],
+                "state": location_meta["state"],
+                "district": location_meta["district"],
+                "location_id": location_id,
+                "latitude": float(location_meta["latitude"]),
+                "longitude": float(location_meta["longitude"]),
+                "population": float(location_meta["population"]) if pd.notna(location_meta["population"]) else 0.0,
+                "time_period": str(target_period),
+                "year": int(target_period.year),
+                "dataset_split": split_lookup[location_index],
             }
-            actual_values = actual_by_year[target_year][city_index]
-            predicted_values = predicted_by_year[target_year][city_index]
+            actual_values = actual_by_period[target_period][location_index]
+            predicted_values = predicted_by_period[target_period][location_index]
             for feature_index, crime_column in enumerate(bundle.crime_columns):
                 row[f"actual_{crime_column}"] = int(actual_values[feature_index])
                 row[f"predicted_{crime_column}"] = int(predicted_values[feature_index])
@@ -492,6 +576,7 @@ def format_metric_block(title: str, metrics: dict[str, float]) -> str:
             f"rmse: {metrics['rmse']:.4f}",
             f"mae: {metrics['mae']:.4f}",
             f"r2: {metrics['r2']:.4f}",
+            f"delta_r2: {metrics.get('delta_r2', 0.0):.4f}",
             f"mape: {metrics['mape']:.4f}",
             f"accuracy_within_20pct: {metrics['accuracy_within_20pct']:.4f}",
             f"risk_band_accuracy: {metrics['risk_band_accuracy']:.4f}",
@@ -526,6 +611,7 @@ def train_and_score(
         _NearestNeighbors,
         _MinMaxScaler,
         _GCNConv,
+        subgraph,
     ) = import_dependencies()
     ModelClass = build_model_class()
 
@@ -542,14 +628,18 @@ def train_and_score(
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     criterion = nn.SmoothL1Loss(beta=0.05)
 
-    yearly_inputs = {
-        year: torch.tensor(values, dtype=torch.float32)
-        for year, values in bundle.inputs_by_year.items()
-    }
-    yearly_targets = {
-        year: torch.tensor(values, dtype=torch.float32)
-        for year, values in bundle.targets_by_year.items()
-    }
+    # Convert entire datasets to torch tensors
+    period_inputs = {period: torch.tensor(v, dtype=torch.float32) for period, v in bundle.inputs_by_period.items()}
+    period_targets = {period: torch.tensor(v, dtype=torch.float32) for period, v in bundle.targets_by_period.items()}
+
+    # FIX 1: Generate isolated Graph structural subgraphs to prevent spatial leakage
+    train_nodes_t = torch.tensor(split.train, dtype=torch.long)
+    val_nodes_t = torch.tensor(split.validation, dtype=torch.long)
+    test_nodes_t = torch.tensor(split.test, dtype=torch.long)
+
+    train_edge_index, _ = subgraph(train_nodes_t, bundle.edge_index, relabel_nodes=True)
+    val_edge_index, _ = subgraph(val_nodes_t, bundle.edge_index, relabel_nodes=True)
+    test_edge_index, _ = subgraph(test_nodes_t, bundle.edge_index, relabel_nodes=True)
 
     best_state_dict = None
     best_val_loss = float("inf")
@@ -560,9 +650,14 @@ def train_and_score(
         model.train()
         optimizer.zero_grad()
         train_losses = []
-        for target_year in bundle.target_years:
-            predictions = model(yearly_inputs[target_year], bundle.edge_index)
-            train_losses.append(criterion(predictions[split.train], yearly_targets[target_year][split.train]))
+        for target_period in bundle.target_periods:
+            # Pass ONLY training nodes and their strictly internal subgraph edges
+            train_inputs = period_inputs[target_period][split.train]
+            predictions_delta = model(train_inputs, train_edge_index)
+            
+            # Loss evaluated against target Delta metrics
+            train_losses.append(criterion(predictions_delta, period_targets[target_period][split.train]))
+        
         train_loss = torch.stack(train_losses).mean()
         train_loss.backward()
         optimizer.step()
@@ -570,10 +665,11 @@ def train_and_score(
         model.eval()
         with torch.no_grad():
             val_losses = []
-            for target_year in bundle.target_years:
-                validation_predictions = model(yearly_inputs[target_year], bundle.edge_index)
+            for target_period in bundle.target_periods:
+                val_inputs = period_inputs[target_period][split.validation]
+                validation_predictions_delta = model(val_inputs, val_edge_index)
                 val_losses.append(
-                    criterion(validation_predictions[split.validation], yearly_targets[target_year][split.validation])
+                    criterion(validation_predictions_delta, period_targets[target_period][split.validation])
                 )
             val_loss = float(torch.stack(val_losses).mean().item())
 
@@ -581,10 +677,7 @@ def train_and_score(
             best_val_loss = val_loss
             best_epoch = epoch
             patience_counter = 0
-            best_state_dict = {
-                key: value.detach().cpu().clone()
-                for key, value in model.state_dict().items()
-            }
+            best_state_dict = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
         else:
             patience_counter += 1
 
@@ -599,36 +692,93 @@ def train_and_score(
         model.load_state_dict(best_state_dict)
 
     model.eval()
-    predicted_scaled_by_year: dict[int, np.ndarray] = {}
-    actual_scaled_by_year: dict[int, np.ndarray] = {}
+    predicted_scaled_by_period: dict[pd.Period, np.ndarray] = {}
+    actual_scaled_by_period: dict[pd.Period, np.ndarray] = {}
+    baseline_zero_scaled_by_period: dict[pd.Period, np.ndarray] = {}
+    baseline_previous_scaled_by_period: dict[pd.Period, np.ndarray] = {}
+    
     with torch.no_grad():
-        for target_year in bundle.target_years:
-            predicted_scaled_by_year[target_year] = model(yearly_inputs[target_year], bundle.edge_index).cpu().numpy()
-            actual_scaled_by_year[target_year] = yearly_targets[target_year].cpu().numpy()
+        for target_period in bundle.target_periods:
+            total_locations = len(bundle.location_ids)
+            reconstructed_pred_scaled = np.zeros((total_locations, len(bundle.crime_columns)), dtype=np.float32)
 
-    actual_by_year = {
-        year: clamp_predictions(bundle.scaler.inverse_transform(values))
-        for year, values in actual_scaled_by_year.items()
+            p_train = model(period_inputs[target_period][split.train], train_edge_index).cpu().numpy()
+            reconstructed_pred_scaled[split.train] = bundle.baselines_by_period[target_period][split.train] + p_train
+
+            p_val = model(period_inputs[target_period][split.validation], val_edge_index).cpu().numpy()
+            reconstructed_pred_scaled[split.validation] = bundle.baselines_by_period[target_period][split.validation] + p_val
+
+            p_test = model(period_inputs[target_period][split.test], test_edge_index).cpu().numpy()
+            reconstructed_pred_scaled[split.test] = bundle.baselines_by_period[target_period][split.test] + p_test
+
+            predicted_scaled_by_period[target_period] = reconstructed_pred_scaled
+            actual_scaled_by_period[target_period] = bundle.baselines_by_period[target_period] + bundle.targets_by_period[target_period]
+            baseline_zero_scaled_by_period[target_period] = bundle.baselines_by_period[target_period]
+            baseline_previous_scaled_by_period[target_period] = (
+                bundle.baselines_by_period[target_period] + bundle.previous_deltas_by_period[target_period]
+            )
+
+    actual_by_period = {
+        period: clamp_predictions(bundle.scaler.inverse_transform(values))
+        for period, values in actual_scaled_by_period.items()
     }
-    predicted_by_year = {
-        year: clamp_predictions(bundle.scaler.inverse_transform(values))
-        for year, values in predicted_scaled_by_year.items()
+    predicted_by_period = {
+        period: clamp_predictions(bundle.scaler.inverse_transform(values))
+        for period, values in predicted_scaled_by_period.items()
+    }
+    baseline_zero_by_period = {
+        period: clamp_predictions(bundle.scaler.inverse_transform(values))
+        for period, values in baseline_zero_scaled_by_period.items()
+    }
+    baseline_previous_by_period = {
+        period: clamp_predictions(bundle.scaler.inverse_transform(values))
+        for period, values in baseline_previous_scaled_by_period.items()
     }
 
-    train_true, train_pred = collect_split_arrays(actual_by_year, predicted_by_year, split.train)
-    val_true, val_pred = collect_split_arrays(actual_by_year, predicted_by_year, split.validation)
-    test_true, test_pred = collect_split_arrays(actual_by_year, predicted_by_year, split.test)
+    train_true, train_pred = collect_split_arrays(actual_by_period, predicted_by_period, split.train)
+    val_true, val_pred = collect_split_arrays(actual_by_period, predicted_by_period, split.validation)
+    test_true, test_pred = collect_split_arrays(actual_by_period, predicted_by_period, split.test)
+    _, train_baseline = collect_split_arrays(actual_by_period, baseline_zero_by_period, split.train)
+    _, val_baseline = collect_split_arrays(actual_by_period, baseline_zero_by_period, split.validation)
+    _, test_baseline = collect_split_arrays(actual_by_period, baseline_zero_by_period, split.test)
 
-    train_metrics = evaluate_predictions(train_true, train_pred, bundle.crime_columns)
+    train_metrics = evaluate_predictions(
+        train_true,
+        train_pred,
+        bundle.crime_columns,
+        baselines=train_baseline,
+    )
     thresholds = {
         "low_max": train_metrics["low_max"],
         "medium_max": train_metrics["medium_max"],
     }
-    validation_metrics = evaluate_predictions(val_true, val_pred, bundle.crime_columns, thresholds=thresholds)
-    test_metrics = evaluate_predictions(test_true, test_pred, bundle.crime_columns, thresholds=thresholds)
+    validation_metrics = evaluate_predictions(
+        val_true,
+        val_pred,
+        bundle.crime_columns,
+        thresholds=thresholds,
+        baselines=val_baseline,
+    )
+    test_metrics = evaluate_predictions(
+        test_true,
+        test_pred,
+        bundle.crime_columns,
+        thresholds=thresholds,
+        baselines=test_baseline,
+    )
+    baseline_zero_test_metrics = evaluate_predictions(
+        *collect_split_arrays(actual_by_period, baseline_zero_by_period, split.test),
+        bundle.crime_columns,
+        thresholds=thresholds,
+    )
+    baseline_previous_test_metrics = evaluate_predictions(
+        *collect_split_arrays(actual_by_period, baseline_previous_by_period, split.test),
+        bundle.crime_columns,
+        thresholds=thresholds,
+    )
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    prediction_rows = build_prediction_rows(bundle, split, actual_by_year, predicted_by_year)
+    prediction_rows = build_prediction_rows(bundle, split, actual_by_period, predicted_by_period)
     prediction_path = output_dir / "historical_backtest_predictions.csv"
     metrics_path = output_dir / "historical_backtest_metrics.json"
     prediction_rows.to_csv(prediction_path, index=False)
@@ -637,16 +787,16 @@ def train_and_score(
         "artifact_version": 2,
         "dataset_path": str(dataset_path),
         "sequence_length": sequence_length,
-        "city_count": len(bundle.city_names),
+        "location_count": len(bundle.location_ids),
         "neighbor_count": neighbors,
         "feature_dim": len(bundle.crime_columns),
         "target_dim": len(bundle.crime_columns),
-        "years": sorted(pd.read_csv(dataset_path)[YEAR_COLUMN].unique().tolist()),
-        "predicted_historical_years": bundle.target_years,
+        "time_frequency": detect_time_frequency(pd.read_csv(dataset_path))[1],
+        "predicted_historical_periods": [str(period) for period in bundle.target_periods],
         "dataset_splits": {
-            "train_cities": len(split.train),
-            "validation_cities": len(split.validation),
-            "test_cities": len(split.test),
+            "train_locations": len(split.train),
+            "validation_locations": len(split.validation),
+            "test_locations": len(split.test),
         },
         "risk_band_thresholds": thresholds,
         "train": {key: value for key, value in train_metrics.items() if key not in {"low_max", "medium_max"}},
@@ -658,21 +808,12 @@ def train_and_score(
     }
     metrics_path.write_text(json.dumps(artifact, indent=2), encoding="utf-8")
 
-    print("Advanced CNN-LSTM-GCN Model Scores")
-    print("==================================")
+    print("Advanced CNN-LSTM-GCN Model Scores (Refactored)")
+    print("==============================================")
     print(f"artifact_version: {artifact['artifact_version']}")
     print(f"sequence_length: {artifact['sequence_length']}")
-    print(f"city_count: {artifact['city_count']}")
+    print(f"location_count: {artifact['location_count']}")
     print(f"neighbor_count: {artifact['neighbor_count']}")
-    print(f"feature_dim: {artifact['feature_dim']}")
-    print(f"target_dim: {artifact['target_dim']}")
-    print(f"years: {artifact['years']}")
-    print()
-    print("Dataset Splits")
-    print("--------------")
-    print(f"train_cities: {artifact['dataset_splits']['train_cities']}")
-    print(f"validation_cities: {artifact['dataset_splits']['validation_cities']}")
-    print(f"test_cities: {artifact['dataset_splits']['test_cities']}")
     print()
     print(format_metric_block("Train Metrics", artifact["train"]))
     print()
@@ -680,27 +821,28 @@ def train_and_score(
     print()
     print(format_metric_block("Test Metrics", artifact["test"]))
     print()
-    print(f"Saved historical predictions to: {prediction_path}")
-    print(f"Saved historical metrics to: {metrics_path}")
-
+    print(format_metric_block("Naive Persistence Baseline (Zero Delta)", baseline_zero_test_metrics))
+    print()
+    print(format_metric_block("Naive Persistence Baseline (Previous Delta)", baseline_previous_test_metrics))
+    
     return artifact
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Train a real historical CNN-LSTM-GCN backtest on 2020-2025 data and score predictions."
+        description="Train an honest historical CNN-LSTM-GCN backtest with separated spatial domains."
     )
     parser.add_argument("--dataset", default=str(DEFAULT_DATASET), help="Path to the historical dataset CSV.")
-    parser.add_argument("--output-dir", default=str(ML_OUTPUT_DIR), help="Directory for metrics and prediction outputs.")
-    parser.add_argument("--sequence-length", type=int, default=DEFAULT_SEQUENCE_LENGTH, help="Historical years per input.")
-    parser.add_argument("--neighbors", type=int, default=DEFAULT_NEIGHBORS, help="Neighbor count for the city graph.")
-    parser.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS, help="Training epochs.")
-    parser.add_argument("--patience", type=int, default=DEFAULT_PATIENCE, help="Early stopping patience.")
-    parser.add_argument("--random-state", type=int, default=DEFAULT_RANDOM_STATE, help="Random seed for split reproducibility.")
-    parser.add_argument("--val-size", type=float, default=DEFAULT_VAL_SIZE, help="Validation city fraction.")
-    parser.add_argument("--test-size", type=float, default=DEFAULT_TEST_SIZE, help="Test city fraction.")
-    parser.add_argument("--learning-rate", type=float, default=0.001, help="Adam learning rate.")
-    parser.add_argument("--weight-decay", type=float, default=1e-4, help="Adam weight decay.")
+    parser.add_argument("--output-dir", default=str(ML_OUTPUT_DIR), help="Directory for outputs.")
+    parser.add_argument("--sequence-length", type=int, default=DEFAULT_SEQUENCE_LENGTH)
+    parser.add_argument("--neighbors", type=int, default=DEFAULT_NEIGHBORS)
+    parser.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
+    parser.add_argument("--patience", type=int, default=DEFAULT_PATIENCE)
+    parser.add_argument("--random-state", type=int, default=DEFAULT_RANDOM_STATE)
+    parser.add_argument("--val-size", type=float, default=DEFAULT_VAL_SIZE)
+    parser.add_argument("--test-size", type=float, default=DEFAULT_TEST_SIZE)
+    parser.add_argument("--learning-rate", type=float, default=0.001)
+    parser.add_argument("--weight-decay", type=float, default=1e-4)
     return parser
 
 

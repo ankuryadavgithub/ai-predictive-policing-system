@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import MainLayout from "../layout/MainLayout";
 import { motion, AnimatePresence } from "framer-motion";
 import DeckGL from "@deck.gl/react";
@@ -20,7 +20,7 @@ const PolicePanel = () => {
   const [notes, setNotes] = useState("");
   const [busyId, setBusyId] = useState(null);
 
-  const fetchReports = async () => {
+  const fetchReports = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
@@ -36,11 +36,11 @@ const PolicePanel = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter]);
 
   useEffect(() => {
     fetchReports();
-  }, [statusFilter]);
+  }, [fetchReports]);
 
   useEffect(() => {
     setNotes(selectedReport?.verification_notes || "");

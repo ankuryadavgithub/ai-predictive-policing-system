@@ -82,6 +82,25 @@ Database (PostgreSQL / CSV dataset)
 
 ## Technology Stack
 
+### Updated Backend Architecture
+
+The backend now separates route handling from reusable service logic:
+
+* `app/services/risk_scoring.py` centralizes weighted risk-score calculation and explains the top forecast drivers.
+* `app/services/forecast_service.py` builds forecast payloads with model source, prediction batch, risk explanation, and decision-support guidance.
+* `app/services/ai_governance.py` exposes responsible-AI guardrails for allowed uses, prohibited uses, and human-review requirements.
+
+This keeps API routes smaller and makes the AI decision-support logic easier to test, explain, and audit.
+
+### Responsible AI Controls
+
+The system treats predictions as aggregate decision-support signals, not automated enforcement decisions.
+
+* Forecasts include a decision-support notice.
+* Risk scores expose their weighted drivers.
+* Patrol recommendations require human review and local context.
+* The system explicitly prohibits individual-level prediction and automatic punitive action.
+
 ### Frontend
 
 * React.js

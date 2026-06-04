@@ -2,19 +2,19 @@ import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import api from "../services/api";
 
+const recordTypeMap = {
+  Historical: "historical",
+  Predicted: "predicted",
+  Combined: "all",
+};
+
+const yearRangeMap = {
+  Historical: { min: 2020, max: 2025 },
+  Predicted: { min: 2026, max: 2030 },
+  Combined: { min: 2020, max: 2030 },
+};
+
 const FilterPanel = ({ filters, setFilters }) => {
-  const recordTypeMap = {
-    Historical: "historical",
-    Predicted: "predicted",
-    Combined: "all",
-  };
-
-  const yearRangeMap = {
-    Historical: { min: 2020, max: 2025 },
-    Predicted: { min: 2026, max: 2030 },
-    Combined: { min: 2020, max: 2030 },
-  };
-
   const currentRange = yearRangeMap[filters.dataset] || yearRangeMap.Historical;
 
   const handleChange = (field,value)=>{

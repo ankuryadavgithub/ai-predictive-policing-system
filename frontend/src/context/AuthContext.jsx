@@ -1,4 +1,4 @@
-﻿import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import api from "../services/api";
 
 const AuthContext = createContext(null);
@@ -7,7 +7,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const refreshUser = async () => {
+  const refreshUser = useCallback(async () => {
     try {
       const res = await api.get("/auth/me");
       setUser(res.data);
@@ -18,11 +18,11 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     refreshUser();
-  }, []);
+  }, [refreshUser]);
 
   useEffect(() => {
     if (!user || user.role !== "police" || !user.gps_consent || !navigator.geolocation) {
@@ -65,27 +65,23 @@ export const AuthProvider = ({ children }) => {
     };
   }, [user]);
 
-  const login = async (credentials) => {
+  const login = useCallback(async (credentials) => {
     const res = await api.post("/auth/login", credentials);
-    if (res.data?.access_token) {
-      sessionStorage.setItem("pps_access_token", res.data.access_token);
-    }
     if (res.data?.user) {
       setUser(res.data.user);
       setLoading(false);
       return res.data.user;
     }
     return refreshUser();
-  };
+  }, [refreshUser]);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       await api.post("/auth/logout");
     } finally {
-      sessionStorage.removeItem("pps_access_token");
       setUser(null);
     }
-  };
+  }, []);
 
   return (
     <AuthContext.Provider

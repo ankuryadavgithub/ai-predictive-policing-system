@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import MainLayout from "../layout/MainLayout";
 import api from "../services/api";
@@ -22,7 +22,7 @@ const AdminAnalytics = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
@@ -43,11 +43,11 @@ const AdminAnalytics = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [recordType]);
 
   useEffect(() => {
     loadData();
-  }, [recordType]);
+  }, [loadData]);
 
   return (
     <MainLayout>

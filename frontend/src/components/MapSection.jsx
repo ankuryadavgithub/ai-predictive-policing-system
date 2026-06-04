@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DeckGL from "@deck.gl/react";
 import { HeatmapLayer, HexagonLayer } from "@deck.gl/aggregation-layers";
 import { ColumnLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
@@ -159,6 +159,8 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[3
   const [reloadKey, setReloadKey] = useState(0);
   const [timelineYear, setTimelineYear] = useState(filters.year ?? 2024);
   const [isPlaying, setIsPlaying] = useState(false);
+  const mapRef = useRef(null);
+  const deckRef = useRef(null);
 
   const mapMode = filters.mapMode ?? "hexbin";
   const areaLevel = filters.areaLevel ?? "city";
@@ -171,6 +173,13 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[3
   const year = Math.min(Math.max(filters.year ?? range.min, range.min), range.max);
   const effectiveYear = mapMode === "forecast" ? Math.max(year, 2026) : year;
   const activeViewState = viewState || internalViewState;
+  const handleMapLoad = useCallback((event) => {
+    mapRef.current = event.target;
+    if (mapRef.current?.resize) {
+      mapRef.current.resize();
+    }
+  }, []);
+
   const updateViewState = useCallback((nextViewState) => {
     const resolvedViewState =
       typeof nextViewState === "function" ? nextViewState(activeViewState) : nextViewState;
@@ -336,6 +345,15 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[3
       }));
     }
   }, [city, state, updateViewState]);
+
+  useEffect(() => {
+    if (mapRef.current?.resize) {
+      mapRef.current.resize();
+    }
+    if (deckRef.current?.deck?.redraw) {
+      deckRef.current.deck.redraw(true);
+    }
+  }, [state, city, mapMode, areaLevel, dataset, heightClass]);
 
   const timelineFrameData = useMemo(() => {
     if (mapMode !== "timeline") {
@@ -570,7 +588,7 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[3
 
   return (
     <div className={`relative ${heightClass} w-full rounded-xl overflow-hidden`}>
-      <div className="absolute top-3 left-3 z-20 max-w-[calc(100%-1.5rem)] bg-white/90 dark:bg-gray-900/90 rounded-lg shadow px-3 py-2 text-[11px] sm:text-xs text-gray-700 dark:text-gray-200">
+      <div className="absolute top-3 left-3 z-40 max-w-[calc(100%-1.5rem)] bg-white/95 dark:bg-gray-900/95 rounded-lg shadow-xl px-3 py-2 text-[11px] sm:text-xs text-gray-700 dark:text-gray-200 backdrop-blur-sm">
         <p className="font-semibold">{mapTitle}</p>
         <p>
           {datasetLabel} | {state === "All" ? "India" : state}
@@ -581,7 +599,7 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[3
         </p>
       </div>
 
-      <div className="absolute top-3 right-3 z-20 flex flex-col gap-2">
+      <div className="absolute top-3 right-3 z-40 flex flex-col gap-2">
         <button
           onClick={resetView}
           className="px-3 py-2 rounded bg-white/90 dark:bg-gray-900/90 text-xs text-gray-700 dark:text-gray-200 shadow"
@@ -601,7 +619,7 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[3
         )}
       </div>
 
-      <div className="absolute bottom-3 left-3 z-20 max-w-[calc(100%-1.5rem)] bg-white/90 dark:bg-gray-900/90 rounded-lg shadow px-3 py-2 text-[11px] sm:text-xs text-gray-700 dark:text-gray-200">
+      <div className="absolute bottom-3 left-3 z-40 max-w-[calc(100%-1.5rem)] bg-white/95 dark:bg-gray-900/95 rounded-lg shadow-xl px-3 py-2 text-[11px] sm:text-xs text-gray-700 dark:text-gray-200 backdrop-blur-sm">
         <p className="font-semibold mb-1">Map Summary</p>
         <p>Total weighted value: {summary.totalValue}</p>
         <p>Peak value: {summary.maxValue}</p>
@@ -665,7 +683,7 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[3
 
       {hoverInfo && (
         <div
-          className="absolute z-30 bg-white dark:bg-gray-900 text-xs text-gray-700 dark:text-gray-200 px-3 py-2 rounded shadow pointer-events-none"
+          className="absolute z-50 bg-white/95 dark:bg-gray-900/95 text-xs text-gray-700 dark:text-gray-200 px-3 py-2 rounded shadow-xl pointer-events-none backdrop-blur-sm"
           style={{ left: hoverInfo.x + 12, top: hoverInfo.y + 12 }}
         >
           <p className="font-semibold">{hoverInfo.title}</p>
@@ -676,6 +694,7 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[3
       )}
 
       <DeckGL
+        ref={deckRef}
         initialViewState={activeViewState}
         viewState={activeViewState}
         controller
@@ -688,6 +707,7 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[3
           mapLib={maplibregl}
           mapStyle="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
           style={{ width: "100%", height: "100%" }}
+          onLoad={handleMapLoad}
         />
       </DeckGL>
     </div>

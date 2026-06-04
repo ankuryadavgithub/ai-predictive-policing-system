@@ -159,12 +159,22 @@ const ForecastSection = ({ filters = {} }) => {
           </motion.h3>
 
           <p className="text-sm text-gray-500">
-            Predicted crime growth (2026–2030)
+            Predicted crime growth (2026-2030)
           </p>
 
         </div>
 
       </div>
+
+      {dataset !== "Historical" && (
+        <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-100">
+          <div className="font-semibold">Decision-support forecast</div>
+          <p className="mt-1">
+            AI forecasts highlight aggregate area-level risk signals. They should support planning and human review,
+            not drive individual targeting or automatic enforcement decisions.
+          </p>
+        </div>
+      )}
 
       {dataset !== "Historical" && city !== "All" && livePrediction && (
         <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
@@ -183,6 +193,26 @@ const ForecastSection = ({ filters = {} }) => {
               <div className="text-lg font-semibold text-slate-800 dark:text-slate-100">{livePrediction.state}, {livePrediction.district}</div>
             </div>
           </div>
+          {livePrediction.risk_explanation?.top_drivers?.length > 0 && (
+            <div className="mt-4">
+              <div className="text-xs uppercase tracking-wide text-slate-500">Top risk drivers</div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {livePrediction.risk_explanation.top_drivers.map((item) => (
+                  <span
+                    key={item.crime_type}
+                    className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                  >
+                    {item.crime_type.replaceAll("_", " ")}: {item.contribution}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {livePrediction.decision_support_notice && (
+            <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
+              {livePrediction.decision_support_notice}
+            </p>
+          )}
         </div>
       )}
 

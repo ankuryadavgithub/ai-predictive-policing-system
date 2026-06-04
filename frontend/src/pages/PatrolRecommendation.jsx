@@ -96,6 +96,42 @@ const getPriorityTone = (band) => {
   };
 };
 
+const normalizeSearchTerm = (value = "") => String(value).toLowerCase().trim();
+
+const diversifySampleCities = (cities, size = 8) => {
+  const normalizedCities = [...new Set((cities || []).filter(Boolean))];
+  if (normalizedCities.length <= size) {
+    return normalizedCities;
+  }
+
+  const bucketed = normalizedCities.reduce((acc, city) => {
+    const group = normalizeSearchTerm(city)[0] || "#";
+    acc[group] = acc[group] || [];
+    if (acc[group].length < size) {
+      acc[group].push(city);
+    }
+    return acc;
+  }, {});
+
+  const groups = Object.keys(bucketed).sort();
+  const sample = [];
+  let cursor = 0;
+  while (sample.length < size && groups.length > 0) {
+    const bucketKey = groups[cursor % groups.length];
+    const bucket = bucketed[bucketKey];
+    if (bucket.length > 0) {
+      sample.push(bucket.shift());
+    }
+    if (bucket.length === 0) {
+      groups.splice(cursor % groups.length, 1);
+    } else {
+      cursor += 1;
+    }
+  }
+
+  return sample.slice(0, size);
+};
+
 const buildRecommendation = (city, forecast, trend = []) => {
   const predictions = Object.entries(forecast?.predicted_crimes || {})
     .filter(([crime]) => crime !== "Total_Estimated_Crimes")
@@ -197,7 +233,7 @@ const PatrolRecommendation = () => {
     }
 
     refreshUser();
-  }, [isPoliceView, user?.patrol_city, user?.patrol_district, user?.patrol_state]);
+  }, [isPoliceView, refreshUser, user?.patrol_city, user?.patrol_district, user?.patrol_state]);
 
   useEffect(() => {
     if (isPoliceView) {
@@ -278,7 +314,7 @@ const PatrolRecommendation = () => {
               record_type: "predicted",
             },
           });
-          const stateCities = (res.data || []).slice(0, 12);
+          const stateCities = diversifySampleCities(res.data || [], 12);
           if (stateCities.length > 0) {
             setUseAdminFallback(false);
             setPoliceAssignedCities(stateCities);
@@ -393,7 +429,7 @@ const PatrolRecommendation = () => {
             ? [cityFilter]
             : isPoliceView && !useAdminFallback
             ? availableCities
-            : availableCities.slice(0, 8);
+            : diversifySampleCities(availableCities, 8);
 
         if (targetCities.length === 0) {
           setRecommendations([]);
@@ -497,6 +533,14 @@ const PatrolRecommendation = () => {
           </div>
         </div>
       </motion.div>
+
+      <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-100">
+        <div className="font-semibold">Human review required</div>
+        <p className="mt-1">
+          Patrol recommendations are planning aids derived from aggregate forecasts. Confirm priorities with recent
+          reports, local context, and supervisor review before changing deployment or enforcement actions.
+        </p>
+      </div>
 
       {isPoliceView && !useAdminFallback ? (
         <motion.div

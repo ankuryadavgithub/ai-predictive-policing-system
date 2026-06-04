@@ -61,6 +61,43 @@ const CRIME_LABELS = {
 
 const formatCrimeName = (value) => CRIME_LABELS[value] || value?.replaceAll("_", " ") || "Unknown";
 
+const normalizeSearchTerm = (value = "") => String(value).toLowerCase().trim();
+
+const diversifySampleCities = (cities, size = 8) => {
+  const normalizedCities = [...new Set((cities || []).filter(Boolean))];
+  if (normalizedCities.length <= size) {
+    return normalizedCities;
+  }
+
+  const bucketed = normalizedCities.reduce((acc, city) => {
+    const group = normalizeSearchTerm(city)[0] || "#";
+    acc[group] = acc[group] || [];
+    if (acc[group].length < size) {
+      acc[group].push(city);
+    }
+    return acc;
+  }, {});
+
+  const groups = Object.keys(bucketed).sort();
+  const sample = [];
+  let cursor = 0;
+
+  while (sample.length < size && groups.length > 0) {
+    const bucketKey = groups[cursor % groups.length];
+    const bucket = bucketed[bucketKey];
+    if (bucket.length > 0) {
+      sample.push(bucket.shift());
+    }
+    if (bucket.length === 0) {
+      groups.splice(cursor % groups.length, 1);
+    } else {
+      cursor += 1;
+    }
+  }
+
+  return sample.slice(0, size);
+};
+
 const getRiskTone = (score) => {
   if (score >= 80) {
     return {
@@ -202,7 +239,7 @@ const MissionControl = () => {
     }
 
     refreshUser();
-  }, [isPoliceView, user?.patrol_city, user?.patrol_district, user?.patrol_state]);
+  }, [isPoliceView, refreshUser, user?.patrol_city, user?.patrol_district, user?.patrol_state]);
 
   useEffect(() => {
     if (!hotspots.length || rotationPaused || !pageVisible) {
@@ -274,7 +311,7 @@ const MissionControl = () => {
           ).sort((a, b) => a.localeCompare(b));
 
           if (districtCities.length > 0) {
-            setScopedCities(districtCities.slice(0, 10));
+            setScopedCities(diversifySampleCities(districtCities, 10));
             return;
           }
         }
@@ -283,7 +320,7 @@ const MissionControl = () => {
           const res = await api.get("/crimes/cities", {
             params: { state: user.patrol_state, record_type: "predicted" },
           });
-          const stateCities = (res.data || []).slice(0, 10);
+          const stateCities = diversifySampleCities(res.data || [], 10);
           if (stateCities.length > 0) {
             setScopedCities(stateCities);
             return;
@@ -311,7 +348,7 @@ const MissionControl = () => {
           ).sort((a, b) => a.localeCompare(b));
 
           if (districtCities.length > 0) {
-            setScopedCities(districtCities.slice(0, 10));
+            setScopedCities(diversifySampleCities(districtCities, 10));
             return;
           }
         }
@@ -361,12 +398,12 @@ const MissionControl = () => {
 
         let missionCities = [];
         if (isPoliceView && !useExplorerFallback) {
-          missionCities = scopedCities.slice(0, 5);
+          missionCities = diversifySampleCities(scopedCities, 5);
         } else {
           const cityRes = await api.get("/crimes/cities", {
             params: { state: stateFilter, record_type: "predicted" },
           });
-          missionCities = (cityRes.data || []).slice(0, 5);
+          missionCities = diversifySampleCities(cityRes.data || [], 5);
         }
 
         const [reportsRes, districtRes, hotspotResponses] = await Promise.all([

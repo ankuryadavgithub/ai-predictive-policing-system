@@ -14,6 +14,9 @@ from app.prediction_source import (
     resolve_effective_record_type,
     resolve_prediction_source,
 )
+from app.services.ai_governance import get_ai_governance_summary
+from app.services.forecast_service import get_city_forecast
+from app.services.risk_scoring import DECISION_SUPPORT_NOTICE, compute_risk_score, explain_risk_score
 
 
 router = APIRouter(prefix="/forecast", tags=["Forecast"])
@@ -180,12 +183,15 @@ def _format_live_prediction(city_name: str, metadata_row, predictions, crime_col
         crime: int(predictions[idx])
         for idx, crime in enumerate(crime_columns)
     }
+    risk_index = float(compute_risk(crime_counts))
     return {
         "city": city_name,
         "state": metadata_row["state"],
         "district": metadata_row["district"],
         "predicted_crimes": crime_counts,
-        "crime_risk_index": float(compute_risk(crime_counts)),
+        "crime_risk_index": risk_index,
+        "risk_explanation": explain_risk_score(crime_counts),
+        "decision_support_notice": DECISION_SUPPORT_NOTICE,
     }
 
 
@@ -231,21 +237,24 @@ def _find_live_forecast(state: str | None, district: str | None, city: str | Non
     return matched[0]
 
 
+def _get_live_forecast_cache_key(state: str | None, district: str | None, city: str | None, top_n: int) -> str:
+    return (
+        f"forecast:live:{state or 'all'}:{district or 'all'}:{city or 'all'}:{top_n}"
+    )
+
+
 def _find_top_live_forecasts(top_n: int):
     forecasts = _get_live_forecasts()
     return sorted(forecasts, key=lambda item: item["crime_risk_index"], reverse=True)[:top_n]
 
 
 def compute_risk(predictions: dict[str, int]) -> float:
-    return (
-        0.25 * predictions.get("Murder", 0)
-        + 0.15 * predictions.get("Rape", 0)
-        + 0.15 * predictions.get("Robbery", 0)
-        + 0.10 * predictions.get("Assault", 0)
-        + 0.10 * predictions.get("Kidnapping_Abduction", 0)
-        + 0.05 * predictions.get("Riots", 0)
-        + 0.20 * predictions.get("Total_Estimated_Crimes", 0)
-    )
+    return compute_risk_score(predictions)
+
+
+@router.get("/governance")
+def get_forecast_governance():
+    return get_ai_governance_summary()
 
 @router.get("/kpis")
 def get_kpis(
@@ -424,11 +433,26 @@ def get_live_forecast(
     top_n: int = 10,
 ):
     if any([state, district, city]):
-        return _find_live_forecast(state=state, district=district, city=city)
-    return {
+        cache_key = _get_live_forecast_cache_key(state, district, city, top_n)
+        cached = get_cache(cache_key)
+        if cached is not None:
+            return cached
+
+        result = _find_live_forecast(state=state, district=district, city=city)
+        set_cache(cache_key, result, settings.redis_cache_ttl_seconds)
+        return result
+
+    cache_key = _get_live_forecast_cache_key(state, district, city, top_n)
+    cached = get_cache(cache_key)
+    if cached is not None:
+        return cached
+
+    result = {
         "top_predictions": _find_top_live_forecasts(top_n),
         "forecast_batch_id": _load_json_file(MODEL_METADATA_PATH).get("forecast_batch_id"),
     }
+    set_cache(cache_key, result, settings.redis_cache_ttl_seconds)
+    return result
 
 
 @router.get("/{city}", response_model=schemas.ForecastResponse)
@@ -445,39 +469,6 @@ def forecast_city(
     if cached is not None:
         return cached
 
-    records = (
-        db.query(models.Crime)
-        .filter(models.Crime.city.ilike(f"%{city}%"))
-        .filter(models.Crime.record_type == "predicted")
-    )
-    records = apply_prediction_source_filter(records, db)
-    records = (
-        records
-        .filter(models.Crime.year >= 2026)
-        .all()
-    )
-
-    if not records:
-        return {
-            "city": city,
-            "predicted_crimes": {},
-            "crime_risk_index": 0,
-            "record_type": "predicted",
-            "source": prediction_source.source,
-            "prediction_batch": prediction_source.prediction_batch,
-        }
-
-    crime_dict: dict[str, int] = {}
-    for record in records:
-        crime_dict[record.crime_type] = crime_dict.get(record.crime_type, 0) + record.crime_count
-
-    data = {
-        "city": city,
-        "predicted_crimes": crime_dict,
-        "crime_risk_index": float(compute_risk(crime_dict)),
-        "record_type": "predicted",
-        "source": prediction_source.source,
-        "prediction_batch": prediction_source.prediction_batch,
-    }
+    data = get_city_forecast(db, city)
     set_cache(cache_key, data, settings.redis_cache_ttl_seconds)
     return data

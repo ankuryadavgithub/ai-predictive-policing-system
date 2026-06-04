@@ -146,6 +146,8 @@ class ForecastResponse(BaseModel):
     city: str
     predicted_crimes: dict[str, int]
     crime_risk_index: float
+    risk_explanation: dict[str, object] | None = None
+    decision_support_notice: str | None = None
     record_type: str = "predicted"
     source: str | None = None
     prediction_batch: str | None = None

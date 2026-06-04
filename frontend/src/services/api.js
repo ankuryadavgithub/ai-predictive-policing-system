@@ -17,14 +17,9 @@ function resolveApiBaseUrl() {
 const api = axios.create({
   baseURL: resolveApiBaseUrl(),
   withCredentials: true,
-});
-
-api.interceptors.request.use((config) => {
-  const token = sessionStorage.getItem("pps_access_token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
+  headers: {
+    Accept: "application/json",
+  },
 });
 
 export default api;

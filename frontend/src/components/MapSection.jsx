@@ -103,6 +103,7 @@ const colorRanges = {
 };
 
 const mapCache = new Map();
+const MAP_CACHE_LIMIT = 24;
 
 const getDatasetRecordType = (dataset) => {
   if (dataset === "Historical") return "historical";
@@ -150,6 +151,16 @@ const getTimelineFrameLabel = (year, dataset) => {
   return `${prefix}: ${year}`;
 };
 
+const getIsCompactViewport = () =>
+  typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches;
+
+const setMapCache = (key, value) => {
+  if (mapCache.size >= MAP_CACHE_LIMIT) {
+    mapCache.delete(mapCache.keys().next().value);
+  }
+  mapCache.set(key, value);
+};
+
 const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[360px] sm:h-[420px]" }) => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -173,6 +184,7 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[3
   const year = Math.min(Math.max(filters.year ?? range.min, range.min), range.max);
   const effectiveYear = mapMode === "forecast" ? Math.max(year, 2026) : year;
   const activeViewState = viewState || internalViewState;
+  const compactViewport = getIsCompactViewport();
   const handleMapLoad = useCallback((event) => {
     mapRef.current = event.target;
     if (mapRef.current?.resize) {
@@ -196,7 +208,7 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[3
     if (mapMode === "incidents") {
       return {
         endpoint: "/crimes/incidents",
-        params: { year: effectiveYear, state, city, crime_type: crimeType, record_type: recordType, max_points: 12000 },
+        params: { year: effectiveYear, state, city, crime_type: crimeType, record_type: recordType, max_points: compactViewport ? 5000 : 12000 },
       };
     }
 
@@ -210,7 +222,7 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[3
           crime_type: crimeType,
           area_level: areaLevel,
           record_type: recordType,
-          max_areas: 600,
+          max_areas: compactViewport ? 250 : 600,
         },
       };
     }
@@ -223,7 +235,7 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[3
           state,
           city,
           crime_type: crimeType,
-          max_areas: 600,
+          max_areas: compactViewport ? 250 : 600,
         },
       };
     }
@@ -238,7 +250,7 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[3
           city,
           crime_type: crimeType,
           record_type: recordType,
-          max_points_per_year: 3000,
+          max_points_per_year: compactViewport ? 1200 : 3000,
         },
       };
     }
@@ -251,10 +263,10 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[3
         city,
         crime_type: crimeType,
         record_type: recordType,
-        max_points: 50000,
+        max_points: compactViewport ? 20000 : 50000,
       },
     };
-  }, [areaLevel, city, crimeType, effectiveYear, mapMode, range.max, range.min, recordType, state]);
+  }, [areaLevel, city, compactViewport, crimeType, effectiveYear, mapMode, range.max, range.min, recordType, state]);
 
   const fetchKey = useMemo(
     () => JSON.stringify({ mode: mapMode, dataset, ...fetchConfig }),
@@ -302,7 +314,7 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[3
           signal: controller.signal,
         });
         const normalizedData = Array.isArray(response.data) ? response.data : [];
-        mapCache.set(fetchKey, normalizedData);
+        setMapCache(fetchKey, normalizedData);
         setData(normalizedData);
         if (!Array.isArray(response.data)) {
           setError("Unexpected map data response received from the server.");
@@ -397,7 +409,7 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[3
           id: `${mapMode}-layer`,
           data: renderData,
           pickable: true,
-          radiusPixels: city === "All" ? 60 : 45,
+          radiusPixels: compactViewport ? 42 : city === "All" ? 60 : 45,
           intensity: 1,
           threshold: 0.05,
           aggregation: "SUM",
@@ -426,8 +438,8 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[3
           data: renderData,
           pickable: true,
           extruded: true,
-          radius: city === "All" ? 30000 : 10000,
-          elevationScale: city === "All" ? 180 : 90,
+          radius: compactViewport ? 22000 : city === "All" ? 30000 : 10000,
+          elevationScale: compactViewport ? 110 : city === "All" ? 180 : 90,
           coverage: 0.88,
           colorRange: colorRanges.hexbin,
           getPosition: (item) => [item.longitude, item.latitude],
@@ -497,7 +509,7 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[3
           pickable: true,
           diskResolution: 20,
           extruded: true,
-          radius: city === "All" ? 18000 : 9000,
+          radius: compactViewport ? 12000 : city === "All" ? 18000 : 9000,
           elevationScale: 25,
           getPosition: (item) => [item.longitude, item.latitude],
           getElevation: (item) => item.total,
@@ -521,7 +533,7 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[3
         }),
         new TextLayer({
           id: "area-label-layer",
-          data: renderData.slice(0, 25),
+          data: renderData.slice(0, compactViewport ? 10 : 25),
           pickable: false,
           getPosition: (item) => [item.longitude, item.latitude],
           getText: (item) => item.area_name,
@@ -543,7 +555,7 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[3
         pickable: true,
         diskResolution: 24,
         extruded: true,
-        radius: city === "All" ? 22000 : 11000,
+        radius: compactViewport ? 14000 : city === "All" ? 22000 : 11000,
         elevationScale: 28,
         getPosition: (item) => [item.longitude, item.latitude],
         getElevation: (item) => item.risk_index,
@@ -567,7 +579,7 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[3
       }),
       new TextLayer({
         id: "forecast-label-layer",
-        data: renderData.slice(0, 20),
+        data: renderData.slice(0, compactViewport ? 8 : 20),
         pickable: false,
         getPosition: (item) => [item.longitude, item.latitude],
         getText: (item) => item.city,
@@ -577,7 +589,7 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[3
         getPixelOffset: [0, -18],
       }),
     ];
-  }, [city, dataset, mapMode, renderData, timelineYear]);
+  }, [city, compactViewport, dataset, mapMode, renderData, timelineYear]);
 
   const mapTitle = mapTitles[mapMode] || "Crime Map";
   const datasetLabel = mapMode === "forecast" ? "Predicted" : datasetLabels[recordType === "all" ? "combined" : recordType];
@@ -587,7 +599,7 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[3
   };
 
   return (
-    <div className={`relative ${heightClass} w-full rounded-xl overflow-hidden`}>
+    <div className={`relative ${heightClass} w-full overflow-hidden rounded-xl [contain:layout_paint]`}>
       <div className="absolute top-3 left-3 z-40 max-w-[calc(100%-1.5rem)] bg-white/95 dark:bg-gray-900/95 rounded-lg shadow-xl px-3 py-2 text-[11px] sm:text-xs text-gray-700 dark:text-gray-200 backdrop-blur-sm">
         <p className="font-semibold">{mapTitle}</p>
         <p>
@@ -602,12 +614,14 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[3
       <div className="absolute top-3 right-3 z-40 flex flex-col gap-2">
         <button
           onClick={resetView}
+          type="button"
           className="px-3 py-2 rounded bg-white/90 dark:bg-gray-900/90 text-xs text-gray-700 dark:text-gray-200 shadow"
         >
           Reset View
         </button>
         {!loading && (
           <button
+            type="button"
             onClick={() => {
               mapCache.delete(fetchKey);
               setReloadKey((prev) => prev + 1);
@@ -658,8 +672,10 @@ const MapSection = ({ filters = {}, viewState, setViewState, heightClass = "h-[3
       )}
 
       {loading && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 dark:bg-gray-900/70 text-sm text-gray-600 dark:text-gray-300">
-          Loading map data...
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/75 text-sm text-gray-600 backdrop-blur-sm dark:bg-gray-900/70 dark:text-gray-300">
+          <div className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 shadow dark:border-slate-700 dark:bg-slate-900/90">
+            Loading map data...
+          </div>
         </div>
       )}
 

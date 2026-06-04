@@ -1,31 +1,30 @@
+import { lazy, Suspense } from "react";
 import { Routes, Route, useLocation, Navigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 
-import Dashboard from "./pages/Dashboard";
-import Heatmap from "./pages/Heatmap";
-import ReportCrime from "./pages/ReportCrime";
-import PolicePanel from "./pages/PolicePanel";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-import AdminPanel from "./pages/AdminPanel";
-import AdminReports from "./pages/AdminReports"
-import AdminAnalytics from "./pages/AdminAnalytics"
-import EvidenceMonitor from "./pages/EvidenceMonitor"
-import PatrolRecommendation from "./pages/PatrolRecommendation"
-import MissionControl from "./pages/MissionControl"
-
 import ProtectedRoute from "./components/ProtectedRoute";
-import Landing from "./pages/Landing";
+
+const Landing = lazy(() => import("./pages/Landing"));
+const Login = lazy(() => import("./pages/Login"));
+const Register = lazy(() => import("./pages/Register"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Heatmap = lazy(() => import("./pages/Heatmap"));
+const ReportCrime = lazy(() => import("./pages/ReportCrime"));
+const PolicePanel = lazy(() => import("./pages/PolicePanel"));
+const AdminPanel = lazy(() => import("./pages/AdminPanel"));
+const AdminReports = lazy(() => import("./pages/AdminReports"));
+const AdminAnalytics = lazy(() => import("./pages/AdminAnalytics"));
+const EvidenceMonitor = lazy(() => import("./pages/EvidenceMonitor"));
+const PatrolRecommendation = lazy(() => import("./pages/PatrolRecommendation"));
+const MissionControl = lazy(() => import("./pages/MissionControl"));
 
 function App() {
-
   const location = useLocation();
 
   return (
-
-    <AnimatePresence mode="wait">
-
-      <Routes location={location} key={location.pathname}>
+    <Suspense fallback={<RouteLoader />}>
+      <AnimatePresence mode="wait">
+        <Routes location={location} key={location.pathname}>
 
         {/* Default */}
         <Route path="/" element={<Landing />} />
@@ -130,12 +129,10 @@ function App() {
         </ProtectedRoute>
         }
         />
-      </Routes>
-
-    </AnimatePresence>
-
+        </Routes>
+      </AnimatePresence>
+    </Suspense>
   );
-
 }
 
 const PageWrapper = ({ children }) => (
@@ -143,10 +140,20 @@ const PageWrapper = ({ children }) => (
     initial={{ opacity: 0, y: 10 }}
     animate={{ opacity: 1, y: 0 }}
     exit={{ opacity: 0, y: -10 }}
-    transition={{ duration: 0.3 }}
+    transition={{ duration: 0.22, ease: "easeOut" }}
   >
     {children}
   </motion.div>
+);
+
+const RouteLoader = () => (
+  <div className="grid min-h-screen place-items-center bg-slate-100 px-6 text-slate-700 dark:bg-slate-950 dark:text-slate-200">
+    <div className="w-full max-w-sm rounded-3xl border border-slate-200 bg-white/85 p-6 text-center shadow-xl backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
+      <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-cyan-500 dark:border-slate-700 dark:border-t-cyan-300" />
+      <p className="mt-4 text-sm font-semibold">Loading workspace...</p>
+      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Preparing only the page you need.</p>
+    </div>
+  </div>
 );
 
 export default App;

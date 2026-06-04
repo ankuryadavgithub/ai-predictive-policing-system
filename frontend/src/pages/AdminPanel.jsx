@@ -32,6 +32,7 @@ const AdminPanel = () => {
   const [districtOptions, setDistrictOptions] = useState([]);
   const [cityOptions, setCityOptions] = useState([]);
   const [identityVerifications, setIdentityVerifications] = useState([]);
+  const [activeTab, setActiveTab] = useState("overview");
 
   const loadPage = async (searchQuery = "") => {
     try {
@@ -236,16 +237,45 @@ const AdminPanel = () => {
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="mb-8"
+        className="relative mb-8 overflow-hidden rounded-[2rem] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.20),_transparent_35%),linear-gradient(135deg,_#f8fbff,_#e8f3ff_55%,_#dbeafe)] p-6 shadow-xl dark:border-cyan-400/20 dark:bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.16),_transparent_35%),linear-gradient(135deg,_#020617,_#0f172a_55%,_#111827)] sm:p-8"
       >
-        <h1 className="text-3xl font-bold text-gray-800 dark:text-white">
-          Administrator Command Center
-        </h1>
-        <p className="text-gray-500 dark:text-gray-400 mt-2">
-          Review onboarding, manage account health, and assign operational patrol areas to police teams.
-        </p>
+        <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-blue-300/30 blur-3xl dark:bg-cyan-400/20" />
+        <div className="relative z-10 max-w-4xl">
+          <span className="rounded-full border border-blue-300/70 bg-blue-100 px-4 py-1 text-xs font-bold uppercase tracking-[0.26em] text-blue-900 dark:border-cyan-300/30 dark:bg-cyan-400/10 dark:text-cyan-100">
+            Admin Operations
+          </span>
+          <h1 className="mt-4 text-3xl font-black tracking-tight text-slate-950 dark:text-white sm:text-5xl">
+            Command Center for users, verification, patrol areas, and governance.
+          </h1>
+          <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600 dark:text-slate-300 sm:text-base">
+            Review onboarding, manage account health, assign patrol scope, and keep sensitive identity workflows inside a deliberate review process.
+          </p>
+        </div>
       </motion.div>
 
+      <div className="mb-6 flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow dark:border-slate-800 dark:bg-slate-900">
+        {[
+          ["overview", "Overview"],
+          ["identity", "Identity Review"],
+          ["users", "User Registry"],
+          ["patrol", "Patrol Areas"],
+        ].map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setActiveTab(id)}
+            className={`rounded-xl px-4 py-2 text-sm font-bold transition ${
+              activeTab === id
+                ? "bg-blue-600 text-white shadow"
+                : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {(activeTab === "overview" || activeTab === "users" || activeTab === "patrol") && (
       <motion.div
         variants={container}
         initial="hidden"
@@ -257,7 +287,9 @@ const AdminPanel = () => {
         <Card title="Total Reports" value={stats.total_reports} />
         <Card title="Verified Reports" value={stats.verified_reports} />
       </motion.div>
+      )}
 
+      {(activeTab === "overview" || activeTab === "identity") && (
       <div className="mb-8 rounded-xl border border-gray-200 bg-white/80 p-5 shadow-xl dark:border-gray-700 dark:bg-gray-900/60">
         <div className="flex items-center justify-between">
           <div>
@@ -355,7 +387,9 @@ const AdminPanel = () => {
           </div>
         )}
       </div>
+      )}
 
+      {(activeTab === "overview" || activeTab === "users" || activeTab === "patrol") && (
       <div className="bg-white/80 dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl overflow-hidden">
         <div className="p-5 border-b border-gray-200 dark:border-gray-700 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -560,6 +594,7 @@ const AdminPanel = () => {
           </div>
         )}
       </div>
+      )}
     </MainLayout>
   );
 };

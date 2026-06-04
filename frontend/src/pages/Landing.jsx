@@ -114,6 +114,21 @@ const outcomeCards = [
   },
 ];
 
+const governanceCards = [
+  {
+    title: "Aggregate signals only",
+    desc: "Forecasts describe area-level patterns and should never be interpreted as individual-level suspicion.",
+  },
+  {
+    title: "Human review required",
+    desc: "Patrol and response decisions should combine model output with verified reports, field knowledge, and supervisor judgment.",
+  },
+  {
+    title: "Transparent risk drivers",
+    desc: "Forecast interfaces expose weighted drivers so users can see why a risk score is elevated.",
+  },
+];
+
 const Landing = () => {
   const navigate = useNavigate();
   const heroRef = useRef(null);
@@ -397,6 +412,33 @@ const Landing = () => {
               <h3>{item.title}</h3>
               <p>{item.desc}</p>
             </motion.div>
+          ))}
+        </div>
+      </section>
+
+      <section id="governance" className="governance-section">
+        <div className="section-head">
+          <span className="section-label">Responsible AI</span>
+          <h2>Prediction should support judgment, not replace it.</h2>
+          <p>
+            The system is framed as decision support: it helps teams compare patterns, prioritize review, and plan resources without automating enforcement.
+          </p>
+        </div>
+
+        <div className="governance-grid">
+          {governanceCards.map((item, index) => (
+            <motion.article
+              key={item.title}
+              initial={{ opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.25 }}
+              transition={{ duration: 0.4, delay: index * 0.06 }}
+              className="governance-card"
+            >
+              <span>{String(index + 1).padStart(2, "0")}</span>
+              <h3>{item.title}</h3>
+              <p>{item.desc}</p>
+            </motion.article>
           ))}
         </div>
       </section>

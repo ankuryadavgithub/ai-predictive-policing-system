@@ -232,27 +232,48 @@ const ReportCrime = () => {
   return (
     <MainLayout>
       <motion.div variants={containerVariant} initial="hidden" animate="show">
-        <motion.h2
+        <motion.section
           variants={itemVariant}
-          className="text-2xl font-semibold mb-6 text-slate-800 dark:text-white"
+          className="relative mb-6 overflow-hidden rounded-[2rem] border border-sky-200 bg-[radial-gradient(circle_at_top_right,_rgba(14,165,233,0.20),_transparent_34%),linear-gradient(135deg,_#f8fbff,_#e8f3ff_55%,_#dbeafe)] p-6 shadow-xl dark:border-cyan-400/20 dark:bg-[radial-gradient(circle_at_top_right,_rgba(34,211,238,0.16),_transparent_34%),linear-gradient(135deg,_#020617,_#0f172a_55%,_#111827)] sm:p-8"
         >
-          Report a Crime
-        </motion.h2>
+          <div className="relative z-10 grid gap-6 lg:grid-cols-[1fr_360px] lg:items-end">
+            <div>
+              <span className="rounded-full border border-sky-300/70 bg-sky-100 px-4 py-1 text-xs font-bold uppercase tracking-[0.26em] text-sky-900 dark:border-cyan-300/30 dark:bg-cyan-400/10 dark:text-cyan-100">
+                Citizen Incident Intake
+              </span>
+              <h1 className="mt-4 text-3xl font-black tracking-tight text-slate-950 dark:text-white sm:text-5xl">
+                Report a crime with location, context, and evidence.
+              </h1>
+              <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600 dark:text-slate-300 sm:text-base">
+                This guided form helps authorized reviewers understand what happened, where it happened, and what evidence is available.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-100">
+              <p className="font-bold">If there is immediate danger</p>
+              <p className="mt-2 leading-6">
+                Contact local emergency services first. This digital report supports review and follow-up, but does not replace urgent response.
+              </p>
+            </div>
+          </div>
+        </motion.section>
 
         <motion.div
           variants={itemVariant}
-          className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow mb-6"
+          className="mb-6 grid gap-3 rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow dark:border-slate-800 dark:bg-slate-900 md:grid-cols-4"
         >
-          <div className="grid md:grid-cols-2 gap-4 text-sm text-gray-600 dark:text-gray-300">
-            <div>
-              <p className="font-semibold text-gray-800 dark:text-white">Before you submit</p>
-              <p>Provide accurate location and a clear description. High quality evidence improves verification speed.</p>
+          {[
+            ["01", "Incident Type", "Choose category and severity."],
+            ["02", "Location", "Use GPS or manual coordinates."],
+            ["03", "Evidence", "Attach images or videos."],
+            ["04", "Review", "Submit for authorized review."],
+          ].map(([step, title, copy]) => (
+            <div key={step} className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-800/70">
+              <span className="text-xs font-black tracking-[0.22em] text-cyan-600 dark:text-cyan-300">{step}</span>
+              <p className="mt-2 font-bold text-slate-900 dark:text-white">{title}</p>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{copy}</p>
             </div>
-            <div>
-              <p className="font-semibold text-gray-800 dark:text-white">What happens next</p>
-              <p>Your report enters review as <strong>Submitted</strong>, then may move to <strong>Verified</strong>, <strong>Rejected</strong>, or <strong>Resolved</strong>.</p>
-            </div>
-          </div>
+          ))}
         </motion.div>
 
         {statusMessage.text && (
@@ -274,9 +295,13 @@ const ReportCrime = () => {
         >
           <motion.div
             variants={itemVariant}
-            whileHover={{ scale: 1.01 }}
-            className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow"
+            className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900"
           >
+            <div className="mb-5">
+              <p className="text-xs font-bold uppercase tracking-[0.24em] text-cyan-600 dark:text-cyan-300">Step 1 and 2</p>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">Incident Details</h2>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Clear descriptions and accurate coordinates help reviewers triage faster.</p>
+            </div>
             <div className="mb-4">
               <label className="text-sm text-gray-500 dark:text-white">Crime Type</label>
               <select
@@ -368,10 +393,13 @@ const ReportCrime = () => {
             </div>
           </motion.div>
 
-          <motion.div variants={itemVariant} className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow">
-            <h3 className="font-semibold mb-4 text-slate-800 dark:text-white">Location Preview</h3>
+          <motion.div variants={itemVariant} className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900">
+            <div className="mb-4">
+              <p className="text-xs font-bold uppercase tracking-[0.24em] text-cyan-600 dark:text-cyan-300">Step 2</p>
+              <h3 className="text-xl font-bold text-slate-800 dark:text-white">Location Preview</h3>
+            </div>
 
-            <div className="relative h-[300px] rounded overflow-hidden">
+            <div className="relative h-[340px] overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800">
               {loadingLocation && (
                 <motion.div
                   animate={{ opacity: [0.5, 1, 0.5] }}
@@ -411,10 +439,11 @@ const ReportCrime = () => {
           </motion.div>
         </motion.div>
 
-        <motion.div variants={itemVariant} className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow mt-6">
+        <motion.div variants={itemVariant} className="mt-6 rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div>
-              <h3 className="font-semibold mb-1 text-slate-800 dark:text-white">
+              <p className="text-xs font-bold uppercase tracking-[0.24em] text-cyan-600 dark:text-cyan-300">Step 3</p>
+              <h3 className="mt-1 font-semibold text-slate-800 dark:text-white">
                 Upload Evidence
               </h3>
               <p className="text-sm text-gray-500 dark:text-gray-300">
@@ -464,7 +493,7 @@ const ReportCrime = () => {
           </div>
         </motion.div>
 
-        <motion.div variants={itemVariant} className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow mt-6">
+        <motion.div variants={itemVariant} className="mt-6 rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
             <div>
               <h3 className="font-semibold text-slate-800 dark:text-white">Recent Report History</h3>
@@ -516,7 +545,7 @@ const ReportCrime = () => {
           </div>
         </motion.div>
 
-        <motion.div variants={itemVariant} className="mt-6 flex flex-wrap items-center gap-4">
+        <motion.div variants={itemVariant} className="mt-6 flex flex-wrap items-center gap-4 rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow dark:border-slate-800 dark:bg-slate-900">
           <motion.button
             whileHover={submitting ? {} : { scale: 1.03 }}
             whileTap={submitting ? {} : { scale: 0.97 }}

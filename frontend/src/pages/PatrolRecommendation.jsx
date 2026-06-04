@@ -658,6 +658,25 @@ const PatrolRecommendation = () => {
       ) : (
         <div className="mt-6 grid gap-4 sm:gap-6 xl:grid-cols-[1.2fr_0.8fr]">
           <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-3">
+              {["Critical", "Elevated", "Moderate"].map((band) => {
+                const count = recommendations.filter((item) => item.band === band).length;
+                const tone = getPriorityTone(band);
+                return (
+                  <div
+                    key={band}
+                    className={`rounded-2xl border bg-white p-4 shadow-sm dark:bg-gray-800 ${tone.border}`}
+                  >
+                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${tone.badge}`}>
+                      {band}
+                    </span>
+                    <p className="mt-3 text-2xl font-black text-slate-900 dark:text-white">{count}</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">priority zones in this lane</p>
+                  </div>
+                );
+              })}
+            </div>
+
             {recommendations.map((item, index) => {
               const tone = getPriorityTone(item.band);
 
@@ -704,7 +723,7 @@ const PatrolRecommendation = () => {
             })}
           </div>
 
-          <div className="rounded-3xl bg-white p-4 sm:p-6 shadow dark:bg-gray-800">
+          <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-xl dark:border-gray-700 dark:bg-gray-800 sm:p-6">
             <h3 className="text-lg font-semibold text-slate-800 dark:text-white">
               {selectedRecommendation?.city || "Selected City"} Deployment Brief
             </h3>

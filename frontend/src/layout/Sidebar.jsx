@@ -59,12 +59,12 @@ const Sidebar = ({ onNavigate }) => {
   ];
 
   return (
-    <div className="w-64 h-full border-r border-slate-200 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-800 text-white shadow-xl dark:border-slate-800">
-      <div className="p-6 text-xl font-bold border-b border-slate-800">
+    <div className="flex h-full w-72 max-w-[86vw] flex-col border-r border-slate-200 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-800 text-white shadow-xl dark:border-slate-800 lg:w-64">
+      <div className="shrink-0 border-b border-slate-800 p-5 text-xl font-bold">
         Crime AI System
       </div>
 
-      <nav className="p-4 space-y-2">
+      <nav className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
         {menu
           .filter((item) => item.roles.includes(role))
           .map((item) => (
@@ -73,7 +73,7 @@ const Sidebar = ({ onNavigate }) => {
               to={item.path}
               onClick={onNavigate}
               className={({ isActive }) =>
-                `relative block rounded-xl px-4 py-3 transition-all duration-200 ${
+                `relative block rounded-xl px-4 py-3 text-sm font-semibold transition-all duration-200 ${
                   isActive
                     ? "bg-blue-600 text-white shadow-lg shadow-blue-950/30"
                     : "text-slate-300 hover:bg-slate-800 hover:text-white"
